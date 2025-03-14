@@ -20,9 +20,9 @@ catch [System.Management.Automation.CommandNotFoundException] { Throw "python3 i
 ################################################################################
 ### Paths
 
-$GRAPHVIZ_MAJOR_VERSION  = "7"
+$GRAPHVIZ_MAJOR_VERSION  = "9"
 $GRAPHVIZ_MIDDLE_VERSION = "0"
-$GRAPHVIZ_MINOR_VERSION  = "4"
+$GRAPHVIZ_MINOR_VERSION  = "0"
 $GRAPHVIZ_VERSION        = "$GRAPHVIZ_MAJOR_VERSION.$GRAPHVIZ_MIDDLE_VERSION.$GRAPHVIZ_MINOR_VERSION"
 $GRAPHVIZ_GIT_ADDRESS    = "https://gitlab.com/graphviz/graphviz.git"
 $GRAPHVIZ_NAME           = "graphviz-$GRAPHVIZ_VERSION"
@@ -61,7 +61,8 @@ $DEPEND_LIBS  = "$DEPEND_PATH\libraries\x64"
 # Build
 New-Item $GRAPHVIZ_BUILD_PATH -ItemType directory
 Set-Location $GRAPHVIZ_BUILD_PATH
-cmake -G "Visual Studio 16 2019" -A x64 $GRAPHVIZ_SRC_PATH `
+cmake -G "Visual Studio 17 2022" -A x64 $GRAPHVIZ_SRC_PATH `
+	-Dwith_gvpr=NO `
 	-DCMAKE_INSTALL_PREFIX:PATH=$GRAPHVIZ_INSTALL_PATH `
 	-DCMAKE_DISABLE_FIND_PACKAGE_ANN=YES `
 	-DCMAKE_DISABLE_FIND_PACKAGE_CAIRO=YES `
@@ -97,6 +98,13 @@ cmake -G "Visual Studio 16 2019" -A x64 $GRAPHVIZ_SRC_PATH `
 	-Dwith_smyrna=NO `
 	-Dwith_zlib=YES
 cmake --build . --parallel --target INSTALL --config Release
+if ($LASTEXITCODE -ne 0) {
+    Throw "CMake build or install failed. Check the output above for errors."
+}
+if (-not (Test-Path "$GRAPHVIZ_INSTALL_PATH\bin")) {
+    Write-Host "Installation directory not found. Creating it manually."
+    New-Item -Path "$GRAPHVIZ_INSTALL_PATH\bin" -ItemType Directory -Force
+}
 Copy-Item -Path "$CURRENT_PATH\graphviz_config" -Destination "$GRAPHVIZ_INSTALL_PATH\bin\config6"
 
 ################################################################################
@@ -183,5 +191,5 @@ Remove-Item "$GRAPHVIZ_INSTALL_PATH\*" -Recurse -Include *.exe
 
 Set-Location $CURRENT_PATH
 
-Remove-Item $GRAPHVIZ_BUILD_PATH -Force -Recurse
-Remove-Item $GRAPHVIZ_SRC_PATH   -Force -Recurse
+#Remove-Item $GRAPHVIZ_BUILD_PATH -Force -Recurse
+#Remove-Item $GRAPHVIZ_SRC_PATH   -Force -Recurse

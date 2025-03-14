@@ -42,7 +42,7 @@ Expand-7Zip $ZLIB_ZIP_NAME . | Expand-7Zip $ZLIB_TAR_NAME .
 # Build
 New-Item $ZLIB_BUILD_PATH -ItemType directory
 Set-Location $ZLIB_BUILD_PATH
-cmake -G "Visual Studio 16 2019" -A x64 $ZLIB_SRC_PATH `
+cmake -G "Visual Studio 17 2022" -A x64 $ZLIB_SRC_PATH `
 	-DCMAKE_INSTALL_PREFIX:PATH=$ZLIB_INSTALL_PATH
 cmake --build . --parallel --target INSTALL --config Debug
 cmake --build . --parallel --target INSTALL --config Release

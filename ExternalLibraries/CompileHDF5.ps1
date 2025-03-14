@@ -47,7 +47,7 @@ Expand-Archive -Path $HDF5_ZIP_NAME -DestinationPath .
 # Build
 New-Item $HDF5_BUILD_PATH -ItemType directory
 Set-Location $HDF5_BUILD_PATH
-cmake -G "Visual Studio 16 2019" -A x64 $HDF5_SRC_PATH `
+cmake -G "Visual Studio 17 2022" -A x64 $HDF5_SRC_PATH `
 	-DCMAKE_INSTALL_PREFIX:PATH=$HDF5_INSTALL_PATH `
 	-DBUILD_SHARED_LIBS=NO `
 	-DBUILD_TESTING=NO `
