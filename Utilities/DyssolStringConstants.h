@@ -34,7 +34,7 @@ namespace StrConst
 	const char* const Dyssol_ConfigCachePath		          = "cachePath";
 	const char* const Dyssol_CacheDirRelease		          = "/cache";
 	const char* const Dyssol_CacheDirDebug			          = "/cache_debug";
-#if _DEBUG
+#ifdef _DEBUG
 	const char* const Dyssol_CacheDir              = Dyssol_CacheDirDebug;
 #else
 	const char* const Dyssol_CacheDir              = Dyssol_CacheDirRelease;
