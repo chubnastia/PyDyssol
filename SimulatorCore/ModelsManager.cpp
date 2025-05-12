@@ -26,13 +26,13 @@ CModelsManager::SModelDir::SModelDir(std::filesystem::path _path, std::string _k
 		pathFull = path;
 }
 
-CModelsManager::~CModelsManager()
+/*CModelsManager::~CModelsManager()
 {
 	for (const auto& [pUnit, hLibrary] : m_loadedUnits)
 		CloseDyssolLibrary(hLibrary);
 	for (const auto& [pSolver, hLibrary] : m_loadedSolvers)
 		CloseDyssolLibrary(hLibrary);
-}
+}*/
 
 size_t CModelsManager::DirsNumber() const
 {
@@ -428,7 +428,7 @@ SSolverDescriptor CModelsManager::TryGetSolverDescriptor(const std::filesystem::
 DYSSOL_LIBRARY_INSTANCE CModelsManager::LoadDyssolLibrary(const std::filesystem::path& _libPath)
 {
 #ifdef _MSC_VER
-	return LoadLibrary(_libPath.c_str());
+	return LoadLibraryA(_libPath.string().c_str());
 #else
 	return dlopen(_libPath.c_str(), RTLD_LAZY);
 #endif

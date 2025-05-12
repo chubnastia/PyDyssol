@@ -47,7 +47,7 @@ namespace FileSystem
 		do
 		{
 			fullPath.resize(fullPath.size() + MAX_PATH);
-			copied = GetModuleFileName(nullptr, &fullPath[0], static_cast<DWORD>(fullPath.size()));
+			copied = GetModuleFileNameW(nullptr, &fullPath[0], static_cast<DWORD>(fullPath.size()));
 		} while (copied >= fullPath.size());
 		fullPath.resize(copied);
 #else
@@ -74,7 +74,7 @@ namespace FileSystem
 		do
 		{
 			absPath.resize(absPath.size() + MAX_PATH);
-			copied = GetFullPathName(_path.c_str(), static_cast<DWORD>(absPath.size()), &absPath[0], nullptr);
+			copied = GetFullPathNameW(_path.c_str(), static_cast<DWORD>(absPath.size()), &absPath[0], nullptr);
 		} while (copied >= absPath.size());
 		absPath.resize(copied);
 		return absPath;
