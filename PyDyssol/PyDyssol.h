@@ -50,11 +50,6 @@ public:
     bool SetCompounds(const std::vector<std::string>& compounds);
     bool SetupPhases(const std::vector<std::pair<std::string, int>>& phases);
 
-
-    // Methods to access simulation results
-    std::vector<std::pair<std::string, double>> GetStreamMassFlow(const std::string& streamKey, double time);
-    std::vector<std::pair<std::string, double>> GetStreamComposition(const std::string& streamKey, double time);
-
     // Methods for unit parameters
     std::vector<std::pair<std::string, std::string>> GetUnits(); // Returns [Unit name, Model name] pairs
     std::string GetModelNameForUnit(const std::string& unitKey) const;
@@ -102,9 +97,22 @@ public:
     pybind11::dict GetUnitFeed(const std::string& unitName, const std::string& feedName, double time) const;
     std::vector<std::string> GetUnitFeeds(const std::string& unitName) const;
 
+    std::vector<std::string> GetUnitStreams(const std::string& unitName) const;
+    pybind11::dict GetUnitStream(const std::string& unitName, const std::string& streamName, double time) const;
+    std::map<std::string, double> GetUnitStreamOverall(const std::string& unitName, const std::string& streamName, double time) const;
+    std::map<std::string, double> GetUnitStreamComposition(const std::string& unitName, const std::string& streamName, double time) const;
+    pybind11::dict GetUnitStreamDistribution(const std::string& unitName, const std::string& streamName, double time) const;
+
+    pybind11::dict GetStream(const std::string& streamName, double time) const;
+    std::map<std::string, double> GetStreamOverall(const std::string& streamName, double time) const;
+    std::map<std::string, double> GetStreamComposition(const std::string& streamName, double time) const;
+    pybind11::dict GetStreamDistribution(const std::string& streamName, double time) const;
+    std::vector<std::string> PyDyssol::GetStreams() const;
+
 
     void PyDyssol::DebugUnitPorts(const std::string& unitName);
     void PyDyssol::DebugStreamData(const std::string& streamName, double time);
+
 };
 
 #endif // PYDYSSOL_H

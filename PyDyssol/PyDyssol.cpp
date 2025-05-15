@@ -380,48 +380,6 @@ void PyDyssol::Simulate(double endTime)
     std::cout << "[PyDyssol] Simulation finished in " << std::fixed << std::setprecision(3) << seconds << " [s]" << std::endl;
 }
 
-std::vector<std::pair<std::string, double>> PyDyssol::GetStreamMassFlow(const std::string& streamKey, double time)
-{
-    std::vector<std::pair<std::string, double>> result;
-    CMaterialStream* stream = m_flowsheet.GetStreamByName(streamKey);
-    if (!stream) {
-        std::cerr << "[PyDyssol] Stream not found: " << streamKey << std::endl;
-        return result;
-    }
-
-    // Get overall mass flow for each phase
-    for (const auto& phase : m_flowsheet.GetPhases()) {
-        double massFlow = stream->GetMassFlow(time);
-        result.emplace_back(phase.name, massFlow);
-        std::cout << "[PyDyssol] Stream " << streamKey << " at time " << time
-            << ": Mass flow (" << phase.name << ") = " << massFlow << std::endl;
-    }
-
-    return result;
-}
-
-std::vector<std::pair<std::string, double>> PyDyssol::GetStreamComposition(const std::string& streamKey, double time)
-{
-    std::vector<std::pair<std::string, double>> result;
-    CMaterialStream* stream = m_flowsheet.GetStreamByName(streamKey);
-    if (!stream) {
-        std::cerr << "[PyDyssol] Stream not found: " << streamKey << std::endl;
-        return result;
-    }
-
-    // Get mass fraction for each compound
-    for (const auto& compoundKey : m_flowsheet.GetCompounds()) {
-        double massFraction = stream->GetCompoundFraction(time, compoundKey);
-        const CCompound* compound = m_materialsDatabase.GetCompound(compoundKey);
-        std::string compoundName = compound ? compound->GetName() : compoundKey;
-        result.emplace_back(compoundName, massFraction);
-        std::cout << "[PyDyssol] Stream " << streamKey << " at time " << time
-            << ": Mass fraction (" << compoundName << ") = " << massFraction << std::endl;
-    }
-
-    return result;
-}
-
 // Methods for unit parameters
 
 std::vector<std::pair<std::string, std::string>> PyDyssol::GetUnits()
@@ -1289,7 +1247,7 @@ std::map<std::string, double> PyDyssol::GetUnitFeedOverall(const std::string& un
     const CStream* feed = m_flowsheet.GetUnitByName(unitName)->GetModel()->GetStreamsManager().GetFeed(feedName);
     if (!feed) throw std::runtime_error("Feed not found: " + feedName + " in unit " + unitName);
 
-    overall["mass"] = feed->GetMass(time);
+    overall["massflow"] = feed->GetMass(time);
     overall["temperature"] = feed->GetTemperature(time);
     overall["pressure"] = feed->GetPressure(time);
     return overall;
@@ -1425,6 +1383,152 @@ pybind11::dict PyDyssol::GetUnitFeed(const std::string& unitName, const std::str
     result["distributions"] = GetUnitFeedDistribution(unitName, feedName, time);
     return result;
 }
+
+
+std::vector<std::string> PyDyssol::GetUnitStreams(const std::string& unitName) const {
+    const CUnitContainer* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit)
+        throw std::runtime_error("Unit not found: " + unitName);
+
+    const auto& streams = unit->GetModel()->GetStreamsManager().GetStreams();
+    std::vector<std::string> result;
+    result.reserve(streams.size());
+    for (const auto* s : streams)
+        if (s) result.push_back(s->GetName());
+    return result;
+}
+
+std::map<std::string, double> PyDyssol::GetUnitStreamOverall(const std::string& unitName, const std::string& streamName, double time) const {
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit) throw std::runtime_error("Unit not found: " + unitName);
+
+    const CStream* stream = unit->GetModel()->GetStreamsManager().GetStream(streamName);
+    if (!stream) throw std::runtime_error("Stream not found: " + streamName + " in unit " + unitName);
+
+    return {
+        {"massflow", stream->GetMassFlow(time)},
+        {"temperature", stream->GetTemperature(time)},
+        {"pressure", stream->GetPressure(time)}
+    };
+}
+
+std::map<std::string, double> PyDyssol::GetUnitStreamComposition(const std::string& unitName, const std::string& streamName, double time) const {
+    std::map<std::string, double> composition;
+
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit) throw std::runtime_error("Unit not found: " + unitName);
+
+    const CStream* stream = unit->GetModel()->GetStreamsManager().GetStream(streamName);
+    if (!stream) throw std::runtime_error("Stream not found: " + streamName + " in unit " + unitName);
+
+    for (const auto& compoundKey : m_flowsheet.GetCompounds()) {
+        const CCompound* compound = m_materialsDatabase.GetCompound(compoundKey);
+        std::string name = compound ? compound->GetName() : compoundKey;
+
+        for (const auto& phase : m_flowsheet.GetPhases()) {
+            double mass = stream->GetCompoundMass(time, compoundKey, phase.state);
+            if (std::abs(mass) > 1e-12)
+                composition[name + " [" + PhaseToString(phase.state) + "]"] = mass;
+        }
+    }
+
+    return composition;
+}
+
+pybind11::dict PyDyssol::GetUnitStreamDistribution(const std::string& unitName, const std::string& streamName, double time) const {
+    pybind11::dict result;
+
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit) throw std::runtime_error("Unit not found: " + unitName);
+
+    const CStream* stream = unit->GetModel()->GetStreamsManager().GetStream(streamName);
+    if (!stream) throw std::runtime_error("Stream not found: " + streamName + " in unit " + unitName);
+
+    for (const CGridDimension* dim : m_flowsheet.GetGrid().GetGridDimensions()) {
+        EDistrTypes type = dim->DimensionType();
+        int idx = GetDistributionTypeIndex(type);
+        if (idx >= 0) {
+            std::vector<double> dist = stream->GetDistribution(time, type);
+            if (!dist.empty())
+                result[py::str(DISTR_NAMES[idx])] = py::cast(dist);
+        }
+    }
+
+    return result;
+}
+
+pybind11::dict PyDyssol::GetUnitStream(const std::string& unitName, const std::string& streamName, double time) const
+{
+    pybind11::dict result;
+    result["overall"] = GetUnitStreamOverall(unitName, streamName, time);
+    result["composition"] = GetUnitStreamComposition(unitName, streamName, time);
+    result["distributions"] = GetUnitStreamDistribution(unitName, streamName, time);
+    return result;
+}
+
+std::map<std::string, double> PyDyssol::GetStreamOverall(const std::string& streamName, double time) const {
+    const CStream* stream = m_flowsheet.GetStreamByName(streamName);
+    if (!stream) throw std::runtime_error("Stream not found: " + streamName);
+
+    return {
+        {"massflow", stream->GetMassFlow(time)},
+        {"temperature", stream->GetTemperature(time)},
+        {"pressure", stream->GetPressure(time)}
+    };
+}
+
+std::map<std::string, double> PyDyssol::GetStreamComposition(const std::string& streamName, double time) const {
+    std::map<std::string, double> composition;
+    const CStream* stream = m_flowsheet.GetStreamByName(streamName);
+    if (!stream) throw std::runtime_error("Stream not found: " + streamName);
+
+    for (const auto& compoundKey : m_flowsheet.GetCompounds()) {
+        const CCompound* compound = m_materialsDatabase.GetCompound(compoundKey);
+        std::string name = compound ? compound->GetName() : compoundKey;
+
+        for (const auto& phase : m_flowsheet.GetPhases()) {
+            double mass = stream->GetCompoundMass(time, compoundKey, phase.state);
+            if (std::abs(mass) > 1e-12)
+                composition[name + " [" + PhaseToString(phase.state) + "]"] = mass;
+        }
+    }
+
+    return composition;
+}
+
+pybind11::dict PyDyssol::GetStreamDistribution(const std::string& streamName, double time) const {
+    pybind11::dict result;
+    const CStream* stream = m_flowsheet.GetStreamByName(streamName);
+    if (!stream) throw std::runtime_error("Stream not found: " + streamName);
+
+    for (const CGridDimension* dim : m_flowsheet.GetGrid().GetGridDimensions()) {
+        EDistrTypes type = dim->DimensionType();
+        int idx = GetDistributionTypeIndex(type);
+        if (idx >= 0) {
+            std::vector<double> dist = stream->GetDistribution(time, type);
+            if (!dist.empty())
+                result[py::str(DISTR_NAMES[idx])] = py::cast(dist);
+        }
+    }
+
+    return result;
+}
+
+pybind11::dict PyDyssol::GetStream(const std::string& streamName, double time) const {
+    pybind11::dict result;
+    result["overall"] = GetStreamOverall(streamName, time);
+    result["composition"] = GetStreamComposition(streamName, time);
+    result["distributions"] = GetStreamDistribution(streamName, time);
+    return result;
+}
+
+std::vector<std::string> PyDyssol::GetStreams() const {
+    std::vector<std::string> names;
+    for (const auto& s : m_flowsheet.GetAllStreams())
+        names.push_back(s->GetName());
+    return names;
+}
+
 
 void PyDyssol::DebugUnitPorts(const std::string& unitName)
 {

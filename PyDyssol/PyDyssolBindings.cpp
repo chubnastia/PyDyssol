@@ -36,25 +36,6 @@ PYBIND11_MODULE(PyDyssol, m) {
         .value("VAPOR", EPhase::VAPOR)
         .export_values();
 
-   /* py::class_<Holdup>(m, "Holdup")
-        .def_readwrite("mass", &Holdup::mass)
-        .def_readwrite("temperature", &Holdup::temperature)
-        .def_readwrite("pressure", &Holdup::pressure)
-        .def_readwrite("composition", &Holdup::composition)
-        .def("__repr__", [](const Holdup& h) {
-        std::ostringstream oss;
-        oss << std::fixed << std::setprecision(3);
-        oss << "mass:        " << h.mass << " kg\n"
-            << "temperature: " << h.temperature << " K\n"
-            << "pressure:    " << h.pressure << " Pa\n";
-
-        for (const auto& comp : h.composition) {
-            oss << comp.first << ": " << comp.second << " kg\n";
-        }
-
-        return oss.str();
-            });*/
-
     // Bind PyDyssol class
     py::class_<PyDyssol>(m, "PyDyssol", "A class to manage Dyssol flowsheet simulations in Python")
         .def(py::init<std::string, std::string>(),
@@ -136,22 +117,6 @@ PYBIND11_MODULE(PyDyssol, m) {
             "    bool: True if successful, False otherwise.\n"
             "Example:\n"
             "    pydyssol.setup_phases([('Liquid', 'liquid'), ('Vapor', EPhase.VAPOR)])")
-        .def("get_stream_mass_flow", &PyDyssol::GetStreamMassFlow,
-            py::arg("stream_key"), py::arg("time"),
-            "Get the mass flow of a stream at a given time.\n"
-            "Args:\n"
-            "    stream_key (str): Key of the stream.\n"
-            "    time (float): Time point to query.\n"
-            "Returns:\n"
-            "    list[tuple[str, float]]: List of (phase_name, mass_flow) pairs.")
-        .def("get_stream_composition", &PyDyssol::GetStreamComposition,
-            py::arg("stream_key"), py::arg("time"),
-            "Get the composition of a stream at a given time.\n"
-            "Args:\n"
-            "    stream_key (str): Key of the stream.\n"
-            "    time (float): Time point to query.\n"
-            "Returns:\n"
-            "    list[tuple[str, float]]: List of (compound_key, mass_fraction) pairs.")
         .def("get_units", &PyDyssol::GetUnits,
             "Get a list of all units in the flowsheet.\n"
             "Returns:\n"
@@ -206,10 +171,43 @@ PYBIND11_MODULE(PyDyssol, m) {
                 py::arg("unit_name"), py::arg("feed_name"), py::arg("time"), py::arg("feed_dict"),
                 "Set feed stream content (overall, composition, distributions) for a specific unit and feed at a given time.")
 
+        .def("get_unit_streams", &PyDyssol::GetUnitStreams,
+                py::arg("unit_name"),
+                "Get names of all internal (work) streams of a unit.")
+        .def("get_unit_stream_overall", &PyDyssol::GetUnitStreamOverall,
+                py::arg("unit_name"), py::arg("stream_name"), py::arg("time"),
+                "Get overall properties (mass, temperature, pressure) of a stream inside a unit.")
+        .def("get_unit_stream_composition", &PyDyssol::GetUnitStreamComposition,
+                py::arg("unit_name"), py::arg("stream_name"), py::arg("time"),
+                "Get compound-phase composition of a stream inside a unit.")
+        .def("get_unit_stream_distribution", &PyDyssol::GetUnitStreamDistribution,
+                py::arg("unit_name"), py::arg("stream_name"), py::arg("time"),
+                "Get solid-phase distributions of a stream inside a unit.")
+        .def("get_unit_stream", &PyDyssol::GetUnitStream,
+                py::arg("unit_name"), py::arg("stream_name"), py::arg("time"),
+                "Get contents of an internal stream inside a unit at a given time.")
+
+        .def("get_stream_overall", &PyDyssol::GetStreamOverall,
+                py::arg("stream_name"), py::arg("time"),
+                "Get overall properties of a flowsheet-level stream.")
+
+        .def("get_stream_composition", &PyDyssol::GetStreamComposition,
+                py::arg("stream_name"), py::arg("time"),
+                "Get compound-phase composition of a flowsheet-level stream.")
+
+        .def("get_stream_distribution", &PyDyssol::GetStreamDistribution,
+                py::arg("stream_name"), py::arg("time"),
+                "Get size distributions of a flowsheet-level stream.")
+
+        .def("get_stream", &PyDyssol::GetStream,
+                py::arg("stream_name"), py::arg("time"),
+                "Get all stream data (overall, composition, distributions) at a given time.")
+
+        .def("get_streams", &PyDyssol::GetStreams, "Return list of all flowsheet-level stream names.")
+
 
         .def("debug_unit_ports", &PyDyssol::DebugUnitPorts, py::arg("unit_name"))
         .def("debug_stream_data", &PyDyssol::DebugStreamData, py::arg("stream_name"), py::arg("time"));
-
 
     // Register exceptions
     py::register_exception<std::runtime_error>(m, "RuntimeError");
