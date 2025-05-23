@@ -14,12 +14,9 @@
 #include "../HDF5Handler/H5Handler.h"
 #include "UnitParameters.h"
 
-/*struct Holdup {
-    double mass;
-    double temperature;
-    double pressure;
-    std::map<std::string, double> composition;
-};*/
+std::string PhaseToString(EPhase phase);
+EOverall StringToEOverall(const std::string& name);
+std::string FormatDouble(double value);
 
 class PyDyssol
 {
@@ -32,8 +29,6 @@ private:
     std::string m_defaultModelsPath;        // Default path for model units
     bool m_isInitialized;                   // Flag to track initialization state
     
-
-
 public:
     PyDyssol(const std::string& materialsPath = "D:/Dyssol/Materials.dmdb",
         const std::string& modelsPath = "C:/Program Files/Dyssol/Units");
@@ -83,11 +78,24 @@ public:
     EPhase GetPhaseByName(const std::string& phaseName) const;
 
     //Holdups
+    std::vector<std::string> GetUnitHoldups(const std::string& unitName) const;
     std::map<std::string, double> GetUnitHoldupComposition(const std::string& unitName, double time) const;
     std::map<std::string, double> GetUnitHoldupOverall(const std::string& unitName, double time) const;
-    void PyDyssol::SetUnitHoldup(const std::string& unitName, double time, const pybind11::dict& data);
+    void SetUnitHoldup(const std::string& unitName, const pybind11::dict& data);
+    void SetUnitHoldup(const std::string& unitName, const std::string& holdupName, const pybind11::dict& data);
     pybind11::dict PyDyssol::GetUnitHoldupDistribution(const std::string& unitName, double time) const;
-    pybind11::dict PyDyssol::GetUnitHoldup(const std::string& unitName, double time) const;
+    std::map<std::string, double> GetUnitHoldupOverall(const std::string& unitName, const std::string& holdupName, double time) const;
+    std::map<std::string, double> GetUnitHoldupComposition(const std::string& unitName, const std::string& holdupName, double time) const;
+    pybind11::dict GetUnitHoldupDistribution(const std::string& unitName, const std::string& holdupName, double time) const;
+    // Default holdup at specific time
+    pybind11::dict GetUnitHoldup(const std::string& unitName, double time) const;
+    // Named holdup at specific time
+    pybind11::dict GetUnitHoldup(const std::string& unitName, const std::string& holdupName, double time) const;
+    //Without timepoints
+    pybind11::dict GetUnitHoldupOverallAllTimes(const std::string& unitName);
+    pybind11::dict GetUnitHoldupCompositionAllTimes(const std::string& unitName);
+    pybind11::dict GetUnitHoldupDistributionAllTimes(const std::string& unitName);
+    pybind11::dict GetUnitHoldupAllTimes(const std::string& unitName);
 
 	// Feeds
     std::map<std::string, double> GetUnitFeedOverall(const std::string& unitName, const std::string& feedName, double time) const;
@@ -96,23 +104,55 @@ public:
     void SetUnitFeed(const std::string& unitName, const std::string& feedName, double time, const pybind11::dict& data);
     pybind11::dict GetUnitFeed(const std::string& unitName, const std::string& feedName, double time) const;
     std::vector<std::string> GetUnitFeeds(const std::string& unitName) const;
+    // Overloads without feedName, default to first feed
+    std::map<std::string, double> GetUnitFeedOverall(const std::string& unitName, double time) const;
+    std::map<std::string, double> GetUnitFeedComposition(const std::string& unitName, double time) const;
+    pybind11::dict GetUnitFeedDistribution(const std::string& unitName, double time) const;
+    pybind11::dict GetUnitFeed(const std::string& unitName, double time) const;
+    //Without timepoints
+    pybind11::dict GetUnitFeedOverallAllTimes(const std::string& unitName);
+    pybind11::dict GetUnitFeedCompositionAllTimes(const std::string& unitName);
+    pybind11::dict GetUnitFeedDistributionAllTimes(const std::string& unitName);
+    pybind11::dict GetUnitFeedAllTimes(const std::string& unitName);
 
+    //Unit Streams
     std::vector<std::string> GetUnitStreams(const std::string& unitName) const;
     pybind11::dict GetUnitStream(const std::string& unitName, const std::string& streamName, double time) const;
     std::map<std::string, double> GetUnitStreamOverall(const std::string& unitName, const std::string& streamName, double time) const;
     std::map<std::string, double> GetUnitStreamComposition(const std::string& unitName, const std::string& streamName, double time) const;
     pybind11::dict GetUnitStreamDistribution(const std::string& unitName, const std::string& streamName, double time) const;
+    std::map<std::string, double> GetUnitStreamOverall(const std::string& unitName, double time) const;
+    std::map<std::string, double> GetUnitStreamComposition(const std::string& unitName, double time) const;
+    pybind11::dict GetUnitStreamDistribution(const std::string& unitName, double time) const;
+    pybind11::dict GetUnitStream(const std::string& unitName, double time) const;
+    //Without timepoints
+    pybind11::dict GetUnitStreamOverallAllTimes(const std::string& unitName);
+    pybind11::dict GetUnitStreamCompositionAllTimes(const std::string& unitName);
+    pybind11::dict GetUnitStreamDistributionAllTimes(const std::string& unitName);
+    pybind11::dict GetUnitStreamAllTimes(const std::string& unitName);
 
+    //Streams
     pybind11::dict GetStream(const std::string& streamName, double time) const;
     std::map<std::string, double> GetStreamOverall(const std::string& streamName, double time) const;
     std::map<std::string, double> GetStreamComposition(const std::string& streamName, double time) const;
     pybind11::dict GetStreamDistribution(const std::string& streamName, double time) const;
     std::vector<std::string> PyDyssol::GetStreams() const;
+    //Without timepoints
+    pybind11::dict GetStreamOverallAllTimes(const std::string& streamName);
+    pybind11::dict GetStreamCompositionAllTimes(const std::string& streamName);
+    pybind11::dict GetStreamDistributionAllTimes(const std::string& streamName);
+    pybind11::dict GetStreamAllTimes(const std::string& streamName);
 
+    //Options
+    pybind11::dict GetOptions() const;
+    void SetOptions(const pybind11::dict& options);
+    pybind11::dict GetOptionsMethods() const;
 
+	//Debug
     void PyDyssol::DebugUnitPorts(const std::string& unitName);
     void PyDyssol::DebugStreamData(const std::string& streamName, double time);
 
 };
+
 
 #endif // PYDYSSOL_H

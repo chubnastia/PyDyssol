@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="PyDyssol.cpp" />
+    <ClCompile Include="PyDyssolBindings.cpp" />
+    <ClCompile Include="PyDyssol_Feeds.cpp" />
+    <ClCompile Include="PyDyssol_Holdups.cpp" />
+    <ClCompile Include="PyDyssol_Options.cpp" />
+    <ClCompile Include="PyDyssol_Parameters.cpp" />
+    <ClCompile Include="PyDyssol_Streams.cpp" />
+    <ClCompile Include="PyDyssol_UnitStreams.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="PyDyssol.h" />
+  </ItemGroup>
+</Project>
