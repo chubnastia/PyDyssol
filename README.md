@@ -1,5 +1,3 @@
-PyDyssol is a Python-C++ hybrid interface for the Dyssol dynamic simulation system for solids processes. It leverages pybind11 to provide a clean and efficient Python API, enabling scripting, automation, and integration of dynamic process simulations directly from Python environments.
-
 # PyDyssol
 
 **PyDyssol** is a Python-C++ hybrid interface to the [Dyssol](https://github.com/dyssol-project/Dyssol-open) simulation engine for solids processes. It uses [`pybind11`](https://github.com/pybind/pybind11) to expose the C++ simulation backend to Python, enabling users to build, run, and analyze flowsheet simulations programmatically.
