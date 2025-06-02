@@ -5,36 +5,8 @@
 
 namespace py = pybind11;
 
-namespace {
-    EPhase ConvertPhaseState(const py::object& state) {
-        if (py::isinstance<py::str>(state)) {
-            std::string state_str = py::cast<std::string>(state);
-            if (state_str == "solid") return EPhase::SOLID;
-            if (state_str == "liquid") return EPhase::LIQUID;
-            if (state_str == "vapor") return EPhase::VAPOR;
-            throw std::invalid_argument("Invalid phase state: " + state_str + ". Must be 'solid', 'liquid', or 'vapor'.");
-        }
-        else if (py::isinstance<py::int_>(state)) {
-            int state_int = py::cast<int>(state);
-            if (state_int < 0 || state_int > 2) {
-                throw std::invalid_argument("Invalid phase state integer: " + std::to_string(state_int) + ". Must be 0 (SOLID), 1 (LIQUID), or 2 (VAPOR).");
-            }
-            return static_cast<EPhase>(state_int);
-        }
-        else if (py::isinstance<EPhase>(state)) {  // Check if the object is an EPhase enum
-            return py::cast<EPhase>(state);
-        }
-        throw std::invalid_argument("Phase state must be a string ('solid', 'liquid', 'vapor'), an integer (0, 1, 2), or an EPhase value.");
-    }
-}
 
 PYBIND11_MODULE(PyDyssol, m) {
-    // Expose EPhase enum
-    py::enum_<EPhase>(m, "EPhase", "Enumeration of phase states")
-        .value("SOLID", EPhase::SOLID)
-        .value("LIQUID", EPhase::LIQUID)
-        .value("VAPOR", EPhase::VAPOR)
-        .export_values();
 
     // Bind PyDyssol class
     py::class_<PyDyssol>(m, "PyDyssol", "A class to manage Dyssol flowsheet simulations in Python")
@@ -80,43 +52,33 @@ PYBIND11_MODULE(PyDyssol, m) {
             "    end_time (float, optional): End time for simulation (seconds). Default: use flowsheet settings.")
         .def("initialize", &PyDyssol::Initialize,
             "Initialize the flowsheet for simulation.\n"
-            "Returns:\n"
-            "    str: Empty string if successful, error message if failed.")
+            "Returns:\n"            "    str: Empty string if successful, error message if failed.")
         .def("debug_flowsheet", &PyDyssol::DebugFlowsheet,
             "Print debug information about the current flowsheet, including units, streams, compounds, and phases.")
-        .def("get_database_compounds", &PyDyssol::GetDatabaseCompounds,
+        
+		// Compounds
+        .def("get_compounds_mdb", &PyDyssol::GetDatabaseCompounds,
             "Returns list of (key, name) pairs from the loaded materials database.")
+        .def("add_compound", &PyDyssol::AddCompound,
+            py::arg("key"),
+            "Add a compound to the flowsheet by its unique key.")
         .def("get_compounds", &PyDyssol::GetCompounds,
-            "Returns list of (key, name) pairs of compounds defined in the flowsheet.")
+            "Get list of (key, name) pairs of compounds defined in the flowsheet.")
         .def("set_compounds", &PyDyssol::SetCompounds,
             py::arg("compounds"),
-            "Set the compounds for the flowsheet.\n"
-            "Args:\n"
-            "    compounds (list[str]): List of compound keys or names.\n"
-            "Returns:\n"
-            "    bool: True if successful, False otherwise.")
-        .def("setup_phases",
-            [](PyDyssol& self, const py::list& phases) {
-                std::vector<std::pair<std::string, int>> phase_descriptors;
-                for (const auto& phase : phases) {
-                    auto tuple = phase.cast<py::tuple>();
-                    if (tuple.size() != 2) {
-                        throw std::invalid_argument("Each phase must be a tuple of (name, state).");
-                    }
-                    std::string name = tuple[0].cast<std::string>();
-                    EPhase state = ConvertPhaseState(tuple[1]);
-                    phase_descriptors.emplace_back(name, static_cast<int>(state));
-                }
-                return self.SetupPhases(phase_descriptors);
-            },
+            "Set compounds in the flowsheet by list of keys or names.")
+
+        //Phases
+        .def("get_phases", &PyDyssol::GetPhases,
+            "Return current list of phases as (name, state) pairs.")
+        .def("set_phases", &PyDyssol::SetPhases,
             py::arg("phases"),
-            "Set the phases for the flowsheet.\n"
-            "Args:\n"
-            "    phases (list[tuple[str, str|int|EPhase]]): List of (name, state) tuples, where state can be a string ('solid', 'liquid', 'vapor'), an integer (0, 1, 2), or an EPhase value.\n"
-            "Returns:\n"
-            "    bool: True if successful, False otherwise.\n"
-            "Example:\n"
-            "    pydyssol.setup_phases([('Liquid', 'liquid'), ('Vapor', EPhase.VAPOR)])")
+            "Replace current phase list. Each item must be (state).")
+        .def("add_phase", &PyDyssol::AddPhase, py::arg("state"),
+            "Add a phase by type only (e.g. 'solid').\n"
+            "The name will be auto-generated like 'SOLID_1'.")
+
+		//Units
         .def("get_units", &PyDyssol::GetUnits,
             "Get a list of all units in the flowsheet.\n"
             "Returns:\n"
@@ -125,157 +87,253 @@ PYBIND11_MODULE(PyDyssol, m) {
             "Get a dictionary of all units: {unit_name: model_name}")
 
         //Parameters
-            .def("get_unit_parameter", &PyDyssol::GetUnitParameter)
-            .def("get_unit_parameters", &PyDyssol::GetUnitParameters)
-            .def("get_unit_parameters_all", &PyDyssol::GetUnitParametersAll)
+        .def("get_unit_parameter", &PyDyssol::GetUnitParameter,
+            py::arg("unit_name"), py::arg("param_name"),
+            "Get a specific parameter from a unit.\n"
+            "Args:\n"
+            "    unit_name (str): Name of the unit.\n"
+            "    param_name (str): Name of the parameter.\n"
+            "Returns:\n"
+            "    The parameter value (type depends on parameter).")
 
-            .def("set_unit_parameter", &PyDyssol::SetUnitParameter,
+        .def("get_unit_parameters", &PyDyssol::GetUnitParameters,
+            py::arg("unit_name"),
+            "Get all active parameters of a unit (according to current model selection).\n"
+            "Args:\n"
+            "    unit_name (str): Name of the unit.\n"
+            "Returns:\n"
+            "    dict[str, (value, type, unit)]: Parameters with values, types, and units.")
+        .def("get_unit_parameters_all", &PyDyssol::GetUnitParametersAll,
+            py::arg("unit_name"),
+            "Get all parameters (including inactive ones) defined in the unit.\n"
+            "Args:\n"
+            "    unit_name (str): Name of the unit.\n"
+            "Returns:\n"
+            "    dict[str, (value, type, unit)]: All parameters regardless of model selection.")
+
+        .def("set_unit_parameter", &PyDyssol::SetUnitParameter,
             py::arg("unitName"), py::arg("paramName"), py::arg("value"),
             "Set a unit parameter for the specified unit.\n"
             "Args:\n"
             "    unitName (str): Name of the unit.\n"
             "    paramName (str): Name of the parameter.\n"
             "    value: Value to set (can be float, int, str, bool, list, etc.).")
+
         .def("get_combo_options", &PyDyssol::GetComboOptions,
-            "Returns list of available combo options for given parameter")
-        .def("get_dependent_parameter_values", &PyDyssol::GetDependentParameterValues, py::arg("unit_name"), py::arg("param_name"),
-            "Get the values of a TIME_DEPENDENT or PARAM_DEPENDENT parameter.\n"
+            py::arg("unit_name"), py::arg("param_name"),
+            "Get all available combo box options for a given combo parameter.\n"
             "Args:\n"
             "    unit_name (str): Name of the unit.\n"
             "    param_name (str): Name of the parameter.\n"
             "Returns:\n"
-            "    list[tuple[float, float]]: List of (independent_var, value) pairs.")
-        .def("get_dependent_parameters", &PyDyssol::GetDependentParameters)
+            "    list[str]: List of valid options for this combo parameter.")
+
+        .def("get_dependent_parameters", &PyDyssol::GetDependentParameters,
+            py::arg("unit_name"),
+            "Get all TIME_DEPENDENT and PARAM_DEPENDENT parameters of a unit.\n"
+            "Args:\n"
+            "    unit_name (str): Name of the unit.\n"
+            "Returns:\n"
+            "    dict[str, list[tuple[float, float]]]: Mapping of parameter names to (x, y) value pairs.")
+       .def("get_dependent_parameter_values", &PyDyssol::GetDependentParameterValues,
+            py::arg("unit_name"), py::arg("param_name"),
+            "Get the (x, y) value pairs of a TIME_DEPENDENT or PARAM_DEPENDENT parameter.\n"
+            "Args:\n"
+            "    unit_name (str): Name of the unit.\n"
+            "    param_name (str): Name of the dependent parameter.\n"
+            "Returns:\n"
+            "    list[tuple[float, float]]: (independent, dependent) value pairs.")
    
         //Holdups
-        .def("get_unit_holdups", &PyDyssol::GetUnitHoldups,
-        py::arg("unit_name"),
-        "Returns a list of holdup names defined in the given unit.")
-        .def("get_unit_holdup_overall",
-        py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitHoldupOverall, py::const_),
-        py::arg("unit_name"), py::arg("time"))
+            .def("get_unit_holdups", &PyDyssol::GetUnitHoldups,
+                py::arg("unit_name"),
+                "Get a list of holdup names defined in the given unit.")
 
-        .def("get_unit_holdup_composition",
-        py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitHoldupComposition, py::const_),
-        py::arg("unit_name"), py::arg("time"))
+            .def("get_unit_holdup_overall",
+                py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitHoldupOverall, py::const_),
+                py::arg("unit_name"), py::arg("time"),
+                "Get overall mass, temperature, and pressure of the default holdup at a specific time.")
+            .def("get_unit_holdup_composition",
+                py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitHoldupComposition, py::const_),
+                py::arg("unit_name"), py::arg("time"),
+                "Get compound-phase composition of the default holdup at a specific time.")
+            .def("get_unit_holdup_distribution",
+                py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitHoldupDistribution, py::const_),
+                py::arg("unit_name"), py::arg("time"),
+                "Return solid-phase size distributions per compound in the default holdup.")
+            .def("get_unit_holdup",
+                py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitHoldup, py::const_),
+                py::arg("unit_name"), py::arg("time"),
+                "Get all data (overall, composition, distributions) of the default holdup at a specific time.")
 
-        .def("get_unit_holdup_distribution",
-        py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitHoldupDistribution, py::const_),
-        py::arg("unit_name"), py::arg("time"),
-        "Return solid-phase size distributions per compound in the default holdup.")
-        .def("get_unit_holdup",
-        py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitHoldup, py::const_),
-        py::arg("unit_name"), py::arg("time"),
-        "Get the overall, composition, and distributions of the default holdup at a specific time.")
-        .def("set_unit_holdup",
+            .def("set_unit_holdup",
                 py::overload_cast<const std::string&, const py::dict&>(&PyDyssol::SetUnitHoldup),
                 py::arg("unit_name"), py::arg("holdup_dict"),
-                "Set the default holdup of a unit at t=0.0")
+                "Set the default holdup of a unit at time t = 0.0 using a dictionary with fields 'overall', 'composition', and 'distributions'.")
 
 		//Holdups with holdupName
-         .def("get_unit_holdup_overall",
-                py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitHoldupOverall, py::const_),
-                py::arg("unit_name"), py::arg("holdup_name"), py::arg("time"))
-
-         .def("get_unit_holdup_composition",
-                py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitHoldupComposition, py::const_),
-                py::arg("unit_name"), py::arg("holdup_name"), py::arg("time"))
-
-          .def("get_unit_holdup_distribution",
-                py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitHoldupDistribution, py::const_),
-                py::arg("unit_name"), py::arg("holdup_name"), py::arg("time"))
-
-         .def("get_unit_holdup",
-                py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitHoldup, py::const_),
-                py::arg("unit_name"), py::arg("holdup_name"), py::arg("time"),
-                "Get holdup content (overall, composition, distributions) from a specific named holdup at given time.")
+        .def("get_unit_holdup_overall",
+            py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitHoldupOverall, py::const_),
+            py::arg("unit_name"), py::arg("holdup_name"), py::arg("time"),
+            "Get overall mass, temperature, and pressure of a specific named holdup at a given time.")
+        .def("get_unit_holdup_composition",
+            py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitHoldupComposition, py::const_),
+            py::arg("unit_name"), py::arg("holdup_name"), py::arg("time"),
+            "Get compound-phase composition of a specific named holdup at a given time.")
+        .def("get_unit_holdup_distribution",
+            py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitHoldupDistribution, py::const_),
+            py::arg("unit_name"), py::arg("holdup_name"), py::arg("time"),
+            "Get size distribution of a specific named holdup at a given time.")
+        .def("get_unit_holdup",
+            py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitHoldup, py::const_),
+            py::arg("unit_name"), py::arg("holdup_name"), py::arg("time"),
+            "Get all data (overall, composition, distributions) from a specific named holdup at a given time.")
 
         .def("set_unit_holdup",
-                py::overload_cast<const std::string&, const std::string&, const py::dict&>(&PyDyssol::SetUnitHoldup),
-                py::arg("unit_name"), py::arg("holdup_name"), py::arg("holdup_dict"),
-                "Set a specific named holdup of a unit at t=0.0")
-        //Holdups without timepoint
-            .def("get_unit_holdup_overall",
-                &PyDyssol::GetUnitHoldupOverallAllTimes,
-                py::arg("unit_name"),
-                "Get overall holdup data for all timepoints for the default holdup in a unit.")
+            py::overload_cast<const std::string&, const std::string&, const py::dict&>(&PyDyssol::SetUnitHoldup),
+            py::arg("unit_name"), py::arg("holdup_name"), py::arg("holdup_dict"),
+            "Set a specific named holdup of a unit at t = 0.0 using a dictionary.")
 
-            .def("get_unit_holdup_composition",
-                &PyDyssol::GetUnitHoldupCompositionAllTimes,
-                py::arg("unit_name"),
-                "Get composition holdup data for all timepoints for the default holdup in a unit.")
+        //Holdups without timepoint, but with holdupName
+        .def("get_unit_holdup_overall",
+            py::overload_cast<const std::string&, const std::string&>(&PyDyssol::GetUnitHoldupOverall),
+            py::arg("unit_name"), py::arg("holdup_name"),
+            "Get overall properties (mass, temp, pressure) over all timepoints for a named holdup.")
+        .def("get_unit_holdup_composition",
+            py::overload_cast<const std::string&, const std::string&>(&PyDyssol::GetUnitHoldupComposition),
+            py::arg("unit_name"), py::arg("holdup_name"),
+            "Get compound-phase composition over time for a named holdup.")
+        .def("get_unit_holdup_distribution",
+            py::overload_cast<const std::string&, const std::string&>(&PyDyssol::GetUnitHoldupDistribution),
+            py::arg("unit_name"), py::arg("holdup_name"),
+            "Get distribution data over time for a named holdup.")
+        .def("get_unit_holdup",
+            py::overload_cast<const std::string&, const std::string&>(&PyDyssol::GetUnitHoldup),
+            py::arg("unit_name"), py::arg("holdup_name"),
+            "Get full time-series data (overall, composition, distributions) for a named holdup.")
 
-            .def("get_unit_holdup_distribution",
-                &PyDyssol::GetUnitHoldupDistributionAllTimes,
-                py::arg("unit_name"),
-                "Get distributions holdup data for all timepoints for the default holdup in a unit.")
-
-            .def("get_unit_holdup",
-                &PyDyssol::GetUnitHoldupAllTimes,
-                py::arg("unit_name"),
-                "Get all holdup data (overall, composition, distributions) for all timepoints for the default holdup in a unit.")
+        //Holdups without timepoint, no holdupName
+        .def("get_unit_holdup_overall",
+            py::overload_cast<const std::string&>(&PyDyssol::GetUnitHoldupOverall),
+            py::arg("unit_name"),
+            "Get overall holdup data (mass, temperature, pressure) over all timepoints for the default holdup.")
+        .def("get_unit_holdup_composition",
+            py::overload_cast<const std::string&>(&PyDyssol::GetUnitHoldupComposition),
+            py::arg("unit_name"),
+            "Get compound-phase composition over all timepoints for the default holdup.")
+        .def("get_unit_holdup_distribution",
+            py::overload_cast<const std::string&>(&PyDyssol::GetUnitHoldupDistribution),
+            py::arg("unit_name"),
+            "Get distribution vectors over all timepoints for the default holdup.")
+        .def("get_unit_holdup",
+            py::overload_cast<const std::string&>(&PyDyssol::GetUnitHoldup),
+            py::arg("unit_name"),
+            "Get full time-series holdup data (overall, composition, distributions) for the default holdup.")
 
 			// Feeds
         .def("get_unit_feeds", &PyDyssol::GetUnitFeeds,
             py::arg("unit_name"),
             "Get a list of feed names defined for the given unit.")
 
+        .def("set_unit_feed",
+            py::overload_cast<const std::string&, const std::string&, double, const py::dict&>(&PyDyssol::SetUnitFeed),
+            py::arg("unit_name"), py::arg("feed_name"), py::arg("time"), py::arg("data"),
+            "Set feed data for a unit's named feed at a specific time.\n"
+            "Args:\n"
+            "    unit_name (str): Name of the unit.\n"
+            "    feed_name (str): Name of the feed stream.\n"
+            "    time (float): Time [s] to apply the values.\n"
+            "    data (dict): Dictionary with keys 'overall', 'composition', and/or 'distributions'.")
+       .def("set_unit_feed",
+            py::overload_cast<const std::string&, const py::dict&>(&PyDyssol::SetUnitFeed),
+            py::arg("unit_name"), py::arg("data"),
+            "Set the first feed of a unit at t=0.0 with a data dictionary.")
+       .def("set_unit_feed",
+            py::overload_cast<const std::string&, double, const py::dict&>(&PyDyssol::SetUnitFeed),
+            py::arg("unit_name"), py::arg("time"), py::arg("data"),
+            "Set the first feed of a unit at the given time.")
+       .def("set_unit_feed",
+            py::overload_cast<const std::string&, const std::string&, const py::dict&>(&PyDyssol::SetUnitFeed),
+            py::arg("unit_name"), py::arg("feed_name"), py::arg("data"),
+            "Set a named feed of a unit at t=0.0 with a data dictionary.")
+
+
         .def("get_unit_feed_overall",
             py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitFeedOverall, py::const_),
             py::arg("unit_name"), py::arg("feed_name"), py::arg("time"),
             "Get overall properties of a feed in a unit at a specific time.")
-        .def("get_unit_feed_overall",
-            py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitFeedOverall, py::const_),
-            py::arg("unit_name"), py::arg("time"),
-            "Get overall properties of the first feed in a unit at a specific time.")
-
         .def("get_unit_feed_composition",
             py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitFeedComposition, py::const_),
             py::arg("unit_name"), py::arg("feed_name"), py::arg("time"),
             "Get composition of a feed in a unit at a specific time.")
-        .def("get_unit_feed_composition",
-            py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitFeedComposition, py::const_),
-            py::arg("unit_name"), py::arg("time"),
-            "Get composition of the first feed in a unit at a specific time.")
-
         .def("get_unit_feed_distribution",
             py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitFeedDistribution, py::const_),
             py::arg("unit_name"), py::arg("feed_name"), py::arg("time"),
             "Get distributions of a feed in a unit at a specific time.")
-        .def("get_unit_feed_distribution",
-            py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitFeedDistribution, py::const_),
-            py::arg("unit_name"), py::arg("time"),
-            "Get distributions of the first feed in a unit at a specific time.")
-
         .def("get_unit_feed",
             py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitFeed, py::const_),
             py::arg("unit_name"), py::arg("feed_name"), py::arg("time"),
             "Get all data of a feed in a unit at a specific time.")
-        .def("get_unit_feed",
+
+		// Feeds without feed name
+       .def("get_unit_feed_overall",
+            py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitFeedOverall, py::const_),
+            py::arg("unit_name"), py::arg("time"),
+            "Get overall properties of the first feed in a unit at a specific time.")
+       .def("get_unit_feed_composition",
+            py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitFeedComposition, py::const_),
+            py::arg("unit_name"), py::arg("time"),
+            "Get composition of the first feed in a unit at a specific time.")
+       .def("get_unit_feed_distribution",
+            py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitFeedDistribution, py::const_),
+            py::arg("unit_name"), py::arg("time"),
+            "Get distributions of the first feed in a unit at a specific time.")
+       .def("get_unit_feed",
             py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitFeed, py::const_),
             py::arg("unit_name"), py::arg("time"),
             "Get all data of the first feed in a unit at a specific time.")
+
+
+        // Feeds with explicit feed name and no timepoints
+    .def("get_unit_feed_overall",
+        py::overload_cast<const std::string&, const std::string&>(&PyDyssol::GetUnitFeedOverall),
+        py::arg("unit_name"), py::arg("feed_name"),
+        "Get overall properties (massflow, temperature, pressure) for all timepoints of a given feed.\n"
+        "Returns a dict with 'timepoints', 'massflow', 'temperature', and 'pressure'.")
+    .def("get_unit_feed_composition",
+        py::overload_cast<const std::string&, const std::string&>(&PyDyssol::GetUnitFeedComposition),
+        py::arg("unit_name"), py::arg("feed_name"),
+        "Get composition data for all timepoints of a given feed.\n"
+        "Returns a dict with 'timepoints' and compound-phase keys mapping to lists of mass values.")
+    .def("get_unit_feed_distribution",
+        py::overload_cast<const std::string&, const std::string&>(&PyDyssol::GetUnitFeedDistribution),
+        py::arg("unit_name"), py::arg("feed_name"),
+        "Get distribution vectors for all timepoints of a given feed.\n"
+        "Returns a dict with 'timepoints' and distribution names as keys.")
+    .def("get_unit_feed",
+        py::overload_cast<const std::string&, const std::string&>(&PyDyssol::GetUnitFeed),
+        py::arg("unit_name"), py::arg("feed_name"),
+        "Get all time-series data (overall, composition, distributions) for a named feed.\n"
+        "Returns a dict with keys 'overall', 'composition', and 'distributions'.")
+
+
         //Feeds without timepoints
-            .def("get_unit_feed_overall",
-                &PyDyssol::GetUnitFeedOverallAllTimes,
-                py::arg("unit_name"),
-                "Get overall feed data for all timepoints for the first feed in a unit.")
-
-            .def("get_unit_feed_composition",
-                &PyDyssol::GetUnitFeedCompositionAllTimes,
-                py::arg("unit_name"),
-                "Get composition feed data for all timepoints for the first feed in a unit.")
-
-            .def("get_unit_feed_distribution",
-                &PyDyssol::GetUnitFeedDistributionAllTimes,
-                py::arg("unit_name"),
-                "Get distributions feed data for all timepoints for the first feed in a unit.")
-
-            .def("get_unit_feed",
-                &PyDyssol::GetUnitFeedAllTimes,
-                py::arg("unit_name"),
-                "Get all feed data (overall, composition, distributions) for all timepoints for the first feed in a unit.")
-
+    .def("get_unit_feed_overall",
+        py::overload_cast<const std::string&>(&PyDyssol::GetUnitFeedOverall),
+        py::arg("unit_name"),
+        "Get overall feed data (massflow, temperature, pressure) for all timepoints of the first feed in a unit.")
+    .def("get_unit_feed_composition",
+        py::overload_cast<const std::string&>(&PyDyssol::GetUnitFeedComposition),
+        py::arg("unit_name"),
+        "Get composition (mass per compound-phase) over all timepoints of the first feed in a unit.")
+    .def("get_unit_feed_distribution",
+        py::overload_cast<const std::string&>(&PyDyssol::GetUnitFeedDistribution),
+        py::arg("unit_name"),
+        "Get distributions (e.g. particle sizes) over all timepoints of the first feed in a unit.")
+    .def("get_unit_feed",
+        py::overload_cast<const std::string&>(&PyDyssol::GetUnitFeed),
+        py::arg("unit_name"),
+        "Get full time-series feed data (overall, composition, distributions) for the first feed in a unit.")
 
 
          // Unit Streams
@@ -286,93 +344,113 @@ PYBIND11_MODULE(PyDyssol, m) {
                 py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitStreamOverall, py::const_),
                 py::arg("unit_name"), py::arg("stream_name"), py::arg("time"),
                 "Get overall properties of a stream inside a unit at a specific time.")
-         .def("get_unit_stream_overall",
-                py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitStreamOverall, py::const_),
-                py::arg("unit_name"), py::arg("time"),
-                "Get overall properties of the first stream inside a unit at a specific time.")
-
          .def("get_unit_stream_composition",
                 py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitStreamComposition, py::const_),
                 py::arg("unit_name"), py::arg("stream_name"), py::arg("time"),
                 "Get compound-phase composition of a stream inside a unit at a specific time.")
-         .def("get_unit_stream_composition",
-                py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitStreamComposition, py::const_),
-                py::arg("unit_name"), py::arg("time"),
-                "Get compound-phase composition of the first stream inside a unit at a specific time.")
-
          .def("get_unit_stream_distribution",
                 py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitStreamDistribution, py::const_),
                 py::arg("unit_name"), py::arg("stream_name"), py::arg("time"),
                 "Get solid-phase distributions of a stream inside a unit at a specific time.")
-         .def("get_unit_stream_distribution",
-                py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitStreamDistribution, py::const_),
-                py::arg("unit_name"), py::arg("time"),
-                "Get solid-phase distributions of the first stream inside a unit at a specific time.")
-
          .def("get_unit_stream",
                 py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitStream, py::const_),
                 py::arg("unit_name"), py::arg("stream_name"), py::arg("time"),
                 "Get all data (overall, composition, distributions) of a stream inside a unit at a specific time.")
-         .def("get_unit_stream",
+
+		// Unit Streams without Stream Name
+
+          .def("get_unit_stream_overall",
+                py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitStreamOverall, py::const_),
+                py::arg("unit_name"), py::arg("time"),
+                "Get overall properties of the first stream inside a unit at a specific time.")
+          .def("get_unit_stream_composition",
+                py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitStreamComposition, py::const_),
+                py::arg("unit_name"), py::arg("time"),
+                "Get compound-phase composition of the first stream inside a unit at a specific time.")
+          .def("get_unit_stream_distribution",
+                py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitStreamDistribution, py::const_),
+                py::arg("unit_name"), py::arg("time"),
+                "Get solid-phase distributions of the first stream inside a unit at a specific time.")
+          .def("get_unit_stream",
                 py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitStream, py::const_),
                 py::arg("unit_name"), py::arg("time"),
                 "Get all data of the first stream inside a unit at a specific time.")
+
+	    //Unit Streams with explicit stream name and no timepoints
+        .def("get_unit_stream_overall",
+                py::overload_cast<const std::string&, const std::string&>(&PyDyssol::GetUnitStreamOverall),
+                py::arg("unit_name"), py::arg("stream_name"),
+                "Get time-series overall properties (massflow, temperature, pressure) for a named stream inside a unit.")
+        .def("get_unit_stream_composition",
+                py::overload_cast<const std::string&, const std::string&>(&PyDyssol::GetUnitStreamComposition),
+                py::arg("unit_name"), py::arg("stream_name"),
+                "Get time-series compound-phase composition for a named internal stream.")
+        .def("get_unit_stream_distribution",
+                py::overload_cast<const std::string&, const std::string&>(&PyDyssol::GetUnitStreamDistribution),
+                py::arg("unit_name"), py::arg("stream_name"),
+                "Get time-series distributions for a named stream inside a unit.")
+        .def("get_unit_stream",
+                py::overload_cast<const std::string&, const std::string&>(&PyDyssol::GetUnitStream),
+                py::arg("unit_name"), py::arg("stream_name"),
+                "Get full time-series data (overall, composition, distributions) for a named stream inside a unit.")
+
         //Unit Streams without timepoints
         .def("get_unit_stream_overall",
-        &PyDyssol::GetUnitStreamOverallAllTimes,
-        py::arg("unit_name"),
-        "Get overall stream data for all timepoints for the first stream in a unit.")
-
+            py::overload_cast<const std::string&>(&PyDyssol::GetUnitStreamOverall),
+            py::arg("unit_name"),
+            "Get overall stream data (massflow, temperature, pressure) over all timepoints for the first stream in a unit.")
         .def("get_unit_stream_composition",
-        &PyDyssol::GetUnitStreamCompositionAllTimes,
-        py::arg("unit_name"),
-        "Get composition stream data for all timepoints for the first stream in a unit.")
-
+            py::overload_cast<const std::string&>(&PyDyssol::GetUnitStreamComposition),
+            py::arg("unit_name"),
+            "Get compound-phase composition over all timepoints for the first stream in a unit.")
         .def("get_unit_stream_distribution",
-        &PyDyssol::GetUnitStreamDistributionAllTimes,
-        py::arg("unit_name"),
-        "Get distributions stream data for all timepoints for the first stream in a unit.")
-
+            py::overload_cast<const std::string&>(&PyDyssol::GetUnitStreamDistribution),
+            py::arg("unit_name"),
+            "Get distribution vectors over all timepoints for the first stream in a unit.")
         .def("get_unit_stream",
-        &PyDyssol::GetUnitStreamAllTimes,
-        py::arg("unit_name"),
-        "Get all stream data (overall, composition, distributions) for all timepoints for the first stream in a unit.")
-
+            py::overload_cast<const std::string&>(&PyDyssol::GetUnitStream),
+            py::arg("unit_name"),
+            "Get all stream data (overall, composition, distributions) over all timepoints for the first stream in a unit.")
 
          // Streams
-        .def("get_stream_overall", &PyDyssol::GetStreamOverall,
-                py::arg("stream_name"), py::arg("time"),
-                "Get overall properties of a flowsheet-level stream.")
-        .def("get_stream_composition", &PyDyssol::GetStreamComposition,
-                py::arg("stream_name"), py::arg("time"),
-                "Get compound-phase composition of a flowsheet-level stream.")
-        .def("get_stream_distribution", &PyDyssol::GetStreamDistribution,
-                py::arg("stream_name"), py::arg("time"),
-                "Get size distributions of a flowsheet-level stream.")
-        .def("get_stream", &PyDyssol::GetStream,
-                py::arg("stream_name"), py::arg("time"),
-                "Get all stream data (overall, composition, distributions) at a given time.")
         .def("get_streams", &PyDyssol::GetStreams, "Return list of all flowsheet-level stream names.")
+
+        .def("get_stream_overall",
+            py::overload_cast<const std::string&, double>(&PyDyssol::GetStreamOverall, py::const_),
+            py::arg("stream_name"), py::arg("time"),
+            "Get overall stream data at a specific time.")
+        .def("get_stream_composition",
+            py::overload_cast<const std::string&, double>(&PyDyssol::GetStreamComposition, py::const_),
+            py::arg("stream_name"), py::arg("time"),
+            "Get stream composition at a specific time.")
+        .def("get_stream_distribution",
+            py::overload_cast<const std::string&, double>(&PyDyssol::GetStreamDistribution, py::const_),
+            py::arg("stream_name"), py::arg("time"),
+            "Get stream distribution at a specific time.")
+        .def("get_stream",
+            py::overload_cast<const std::string&, double>(&PyDyssol::GetStream, py::const_),
+            py::arg("stream_name"), py::arg("time"),
+            "Get all stream data (overall, composition, distributions) at a given time.")
+        
+
         //Streams without timepoints
         .def("get_stream_overall",
-        &PyDyssol::GetStreamOverallAllTimes,
-        py::arg("stream_name"),
-        "Get overall stream data for all timepoints.")
-
+            py::overload_cast<const std::string&>(&PyDyssol::GetStreamOverall),
+            py::arg("stream_name"),
+            "Get overall stream data for all timepoints.")
         .def("get_stream_composition",
-        &PyDyssol::GetStreamCompositionAllTimes,
-        py::arg("stream_name"),
-        "Get composition stream data for all timepoints.")
-
+            py::overload_cast<const std::string&>(&PyDyssol::GetStreamComposition),
+            py::arg("stream_name"),
+            "Get stream composition for all timepoints.")
         .def("get_stream_distribution",
-        &PyDyssol::GetStreamDistributionAllTimes,
-        py::arg("stream_name"),
-        "Get distributions stream data for all timepoints.")
+            py::overload_cast<const std::string&>(&PyDyssol::GetStreamDistribution),
+            py::arg("stream_name"),
+            "Get stream distribution for all timepoints.")
 
         .def("get_stream",
-        &PyDyssol::GetStreamAllTimes,
-        py::arg("stream_name"),
-        "Get all stream data (overall, composition, distributions) for all timepoints.")
+            py::overload_cast<const std::string&>(&PyDyssol::GetStream),
+            py::arg("stream_name"),
+            "Get all stream data (overall, composition, distributions) for all timepoints.")
 
         //Options
         .def("get_options", &PyDyssol::GetOptions, "Get flowsheet simulation options.")
@@ -380,7 +458,7 @@ PYBIND11_MODULE(PyDyssol, m) {
         .def("get_options_methods", &PyDyssol::GetOptionsMethods,
                 "Return valid string options for convergenceMethod and extrapolationMethod.")
 
-
+		//Debugging
         .def("debug_unit_ports", &PyDyssol::DebugUnitPorts, py::arg("unit_name"))
         .def("debug_stream_data", &PyDyssol::DebugStreamData, py::arg("stream_name"), py::arg("time"));
 
@@ -389,6 +467,11 @@ PYBIND11_MODULE(PyDyssol, m) {
     py::register_exception<std::runtime_error>(m, "RuntimeError");
     py::register_exception<std::invalid_argument>(m, "ValueError");
 
+    py::enum_<EPhase>(m, "EPhase")
+        .value("SOLID", EPhase::SOLID)
+        .value("LIQUID", EPhase::LIQUID)
+        .value("VAPOR", EPhase::VAPOR)
+        .export_values();
 
 	//Pretty print function
     m.def("pretty_print", [](const py::dict& data) {

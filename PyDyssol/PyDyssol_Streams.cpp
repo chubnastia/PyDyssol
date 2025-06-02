@@ -71,7 +71,7 @@ std::vector<std::string> PyDyssol::GetStreams() const {
 }
 
 //Without timepoints
-pybind11::dict PyDyssol::GetStreamOverallAllTimes(const std::string& streamName) {
+pybind11::dict PyDyssol::GetStreamOverall(const std::string& streamName) {
     pybind11::dict overall;
 
     const CStream* stream = m_flowsheet.GetStreamByName(streamName);
@@ -99,7 +99,7 @@ pybind11::dict PyDyssol::GetStreamOverallAllTimes(const std::string& streamName)
     return overall;
 }
 
-pybind11::dict PyDyssol::GetStreamCompositionAllTimes(const std::string& streamName) {
+pybind11::dict PyDyssol::GetStreamComposition(const std::string& streamName) {
     pybind11::dict composition;
 
     const CStream* stream = m_flowsheet.GetStreamByName(streamName);
@@ -140,7 +140,7 @@ pybind11::dict PyDyssol::GetStreamCompositionAllTimes(const std::string& streamN
     return composition;
 }
 
-pybind11::dict PyDyssol::GetStreamDistributionAllTimes(const std::string& streamName) {
+pybind11::dict PyDyssol::GetStreamDistribution(const std::string& streamName) {
     pybind11::dict distributions;
 
     const CStream* stream = m_flowsheet.GetStreamByName(streamName);
@@ -190,10 +190,10 @@ pybind11::dict PyDyssol::GetStreamDistributionAllTimes(const std::string& stream
     return distributions;
 }
 
-pybind11::dict PyDyssol::GetStreamAllTimes(const std::string& streamName) {
+pybind11::dict PyDyssol::GetStream(const std::string& streamName) {
     pybind11::dict result;
-    result["overall"] = GetStreamOverallAllTimes(streamName);
-    result["composition"] = GetStreamCompositionAllTimes(streamName);
-    result["distributions"] = GetStreamDistributionAllTimes(streamName);
+    result["overall"] = GetStreamOverall(streamName);
+    result["composition"] = GetStreamComposition(streamName);
+    result["distributions"] = GetStreamDistribution(streamName);
     return result;
 }

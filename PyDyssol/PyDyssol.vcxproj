@@ -89,18 +89,19 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="PyDyssol.h" />
+  </ItemGroup>
+  <ItemGroup>
     <ClCompile Include="PyDyssol.cpp" />
     <ClCompile Include="PyDyssolBindings.cpp" />
     <ClCompile Include="PyDyssol_Feeds.cpp" />
     <ClCompile Include="PyDyssol_Holdups.cpp" />
     <ClCompile Include="PyDyssol_Options.cpp" />
     <ClCompile Include="PyDyssol_Parameters.cpp" />
+    <ClCompile Include="PyDyssol_Phases_Comps.cpp" />
     <ClCompile Include="PyDyssol_Streams.cpp" />
     <ClCompile Include="PyDyssol_UnitStreams.cpp" />
     <ClCompile Include="PyDyssol_Utils.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="PyDyssol.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

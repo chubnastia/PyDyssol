@@ -109,7 +109,6 @@ pybind11::dict PyDyssol::GetUnitStream(const std::string& unitName, double time)
     return GetUnitStream(unitName, streams.front(), time);
 }
 
-//Without timepoints
 pybind11::dict PyDyssol::GetUnitStream(const std::string& unitName, const std::string& streamName, double time) const
 {
     pybind11::dict result;
@@ -119,7 +118,145 @@ pybind11::dict PyDyssol::GetUnitStream(const std::string& unitName, const std::s
     return result;
 }
 
-pybind11::dict PyDyssol::GetUnitStreamOverallAllTimes(const std::string& unitName) {
+//Without timepoints, with stream_name
+pybind11::dict PyDyssol::GetUnitStreamOverall(const std::string& unitName, const std::string& streamName) {
+    pybind11::dict overall;
+
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit)
+        throw std::runtime_error("Unit not found: " + unitName);
+
+    const auto* stream = unit->GetModel()->GetStreamsManager().GetStream(streamName);
+    if (!stream)
+        throw std::runtime_error("Stream not found: " + streamName);
+
+    auto timepoints = stream->GetAllTimePoints();
+    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
+    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+        timepoints.push_back(t_end);
+
+    std::vector<double> timeList;
+    std::map<std::string, std::vector<double>> data;
+    for (double t : timepoints) {
+        timeList.push_back(t);
+        data["massflow"].push_back(stream->GetMassFlow(t));
+        data["temperature"].push_back(stream->GetTemperature(t));
+        data["pressure"].push_back(stream->GetPressure(t));
+    }
+
+    overall["timepoints"] = timeList;
+    for (const auto& [key, vec] : data)
+        overall[key.c_str()] = vec;
+
+    return overall;
+}
+
+pybind11::dict PyDyssol::GetUnitStreamComposition(const std::string& unitName, const std::string& streamName) {
+    pybind11::dict composition;
+
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit)
+        throw std::runtime_error("Unit not found: " + unitName);
+
+    const auto* stream = unit->GetModel()->GetStreamsManager().GetStream(streamName);
+    if (!stream)
+        throw std::runtime_error("Stream not found: " + streamName);
+
+    auto timepoints = stream->GetAllTimePoints();
+    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
+    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+        timepoints.push_back(t_end);
+
+    std::vector<double> timeList;
+    std::map<std::string, std::vector<double>> data;
+    std::set<std::string> allLabels;
+
+    for (double t : timepoints) {
+        timeList.push_back(t);
+        for (const auto& compoundKey : m_flowsheet.GetCompounds()) {
+            const auto* compound = m_materialsDatabase.GetCompound(compoundKey);
+            std::string compoundName = compound ? compound->GetName() : compoundKey;
+
+            for (const auto& phase : m_flowsheet.GetPhases()) {
+                std::string label = compoundName + " [" + PhaseToString(phase.state) + "]";
+                double mass = stream->GetCompoundMass(t, compoundKey, phase.state);
+                data[label].push_back(mass);
+                allLabels.insert(label);
+            }
+        }
+    }
+
+    composition["timepoints"] = timeList;
+    for (const auto& label : allLabels) {
+        const auto& values = data[label];
+        bool allZero = std::all_of(values.begin(), values.end(), [](double v) { return std::abs(v) < 1e-15; });
+        if (!allZero)
+            composition[label.c_str()] = values;
+    }
+
+    return composition;
+}
+
+pybind11::dict PyDyssol::GetUnitStreamDistribution(const std::string& unitName, const std::string& streamName) {
+    pybind11::dict distributions;
+
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit)
+        throw std::runtime_error("Unit not found: " + unitName);
+
+    const auto* stream = unit->GetModel()->GetStreamsManager().GetStream(streamName);
+    if (!stream)
+        throw std::runtime_error("Stream not found: " + streamName);
+
+    auto timepoints = stream->GetAllTimePoints();
+    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
+    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+        timepoints.push_back(t_end);
+
+    std::vector<double> timeList;
+    std::map<std::string, std::vector<std::vector<double>>> data;
+    std::set<std::string> allNames;
+
+    for (double t : timepoints) {
+        timeList.push_back(t);
+        for (const CGridDimension* dim : m_flowsheet.GetGrid().GetGridDimensions()) {
+            EDistrTypes type = dim->DimensionType();
+            int idx = GetDistributionTypeIndex(type);
+            if (idx < 0) continue;
+
+            std::string name = DISTR_NAMES[idx];
+            std::vector<double> dist = stream->GetDistribution(t, type);
+            data[name].push_back(dist);
+            allNames.insert(name);
+        }
+    }
+
+    distributions["timepoints"] = timeList;
+    for (const auto& name : allNames) {
+        const auto& vectors = data[name];
+
+        bool allZero = std::all_of(vectors.begin(), vectors.end(), [](const std::vector<double>& vec) {
+            return std::all_of(vec.begin(), vec.end(), [](double v) { return std::abs(v) < 1e-15; });
+            });
+
+        if (!allZero)
+            distributions[name.c_str()] = vectors;
+    }
+
+    return distributions;
+}
+
+pybind11::dict PyDyssol::GetUnitStream(const std::string& unitName, const std::string& streamName) {
+    pybind11::dict result;
+    result["overall"] = GetUnitStreamOverall(unitName, streamName);
+    result["composition"] = GetUnitStreamComposition(unitName, streamName);
+    result["distributions"] = GetUnitStreamDistribution(unitName, streamName);
+    return result;
+}
+
+
+//Without timepoints, no stream_name
+pybind11::dict PyDyssol::GetUnitStreamOverall(const std::string& unitName) {
     pybind11::dict overall;
 
     const auto* unit = m_flowsheet.GetUnitByName(unitName);
@@ -151,7 +288,7 @@ pybind11::dict PyDyssol::GetUnitStreamOverallAllTimes(const std::string& unitNam
     return overall;
 }
 
-pybind11::dict PyDyssol::GetUnitStreamCompositionAllTimes(const std::string& unitName) {
+pybind11::dict PyDyssol::GetUnitStreamComposition(const std::string& unitName) {
     pybind11::dict composition;
 
     const auto* unit = m_flowsheet.GetUnitByName(unitName);
@@ -197,7 +334,7 @@ pybind11::dict PyDyssol::GetUnitStreamCompositionAllTimes(const std::string& uni
     return composition;
 }
 
-pybind11::dict PyDyssol::GetUnitStreamDistributionAllTimes(const std::string& unitName) {
+pybind11::dict PyDyssol::GetUnitStreamDistribution(const std::string& unitName) {
     pybind11::dict distributions;
 
     const auto* unit = m_flowsheet.GetUnitByName(unitName);
@@ -242,7 +379,6 @@ pybind11::dict PyDyssol::GetUnitStreamDistributionAllTimes(const std::string& un
             }
             if (!allZero) break;
         }
-
         if (!allZero) {
             distributions[distName.c_str()] = vecOfVecs;
         }
@@ -251,10 +387,10 @@ pybind11::dict PyDyssol::GetUnitStreamDistributionAllTimes(const std::string& un
     return distributions;
 }
 
-pybind11::dict PyDyssol::GetUnitStreamAllTimes(const std::string& unitName) {
+pybind11::dict PyDyssol::GetUnitStream(const std::string& unitName) {
     pybind11::dict result;
-    result["overall"] = GetUnitStreamOverallAllTimes(unitName);
-    result["composition"] = GetUnitStreamCompositionAllTimes(unitName);
-    result["distributions"] = GetUnitStreamDistributionAllTimes(unitName);
+    result["overall"] = GetUnitStreamOverall(unitName);
+    result["composition"] = GetUnitStreamComposition(unitName);
+    result["distributions"] = GetUnitStreamDistribution(unitName);
     return result;
 }

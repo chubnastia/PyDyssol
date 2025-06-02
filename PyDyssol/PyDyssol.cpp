@@ -7,25 +7,11 @@
 #include <chrono>
 #include <iomanip>    // for std::setprecision
 #include <sstream>    // for std::ostringstream
-#include <pybind11/pybind11.h> // Add pybind11 headers
+#include <pybind11/pybind11.h> 
 #include <pybind11/stl.h>      // For std::vector and std::pair bindings
 #include <pybind11/stl_bind.h>      // For STL bindings with containers
-#include "../SimulatorCore/Flowsheet.h"
-#include "../SimulatorCore/Simulator.h"
-#include "MaterialsDatabase.h"
-#include "BaseUnit.h"
-#include "../SimulatorCore/ModelsManager.h"
-#include "../HDF5Handler/H5Handler.h"
-#include "UnitParameters.h"
-#include "StringFunctions.h"
-#include <windows.h>
 #include <SaveLoadManager.h>
-#include "UnitPorts.h"
-#include "Holdup.h"
-#include "DyssolUtilities.h"
-#include "DyssolDefines.h"
-#include "MultidimensionalGrid.h"
-
+#include <Flowsheet.h>
 
 namespace fs = std::filesystem;
 namespace py = pybind11; // Add namespace alias
@@ -157,48 +143,6 @@ void PyDyssol::DebugFlowsheet()
     }
 }
 
-std::vector<std::pair<std::string, std::string>> PyDyssol::GetCompounds() const {
-    std::vector<std::pair<std::string, std::string>> out;
-    for (const auto& key : m_flowsheet.GetCompounds()) {
-        const CCompound* compound = m_materialsDatabase.GetCompound(key);
-        if (compound)
-            out.emplace_back(compound->GetKey(), compound->GetName());
-    }
-    return out;
-}
-
-bool PyDyssol::SetCompounds(const std::vector<std::string>& compounds)
-{
-    std::cout << "[PyDyssol] Setting up compounds..." << std::endl;
-    std::vector<std::string> keys;
-    for (const auto& compound : compounds) {
-        auto* comp = m_materialsDatabase.GetCompound(compound);
-        if (!comp) {
-            comp = m_materialsDatabase.GetCompoundByName(compound);
-        }
-        if (!comp) {
-            std::cerr << "[PyDyssol] Compound not found: " << compound << std::endl;
-            return false;
-        }
-        keys.push_back(comp->GetKey());
-        std::cout << "[PyDyssol] Added compound: " << compound << " (Key: " << comp->GetKey() << ")" << std::endl;
-    }
-    m_flowsheet.SetCompounds(keys);
-    return true;
-}
-
-bool PyDyssol::SetupPhases(const std::vector<std::pair<std::string, int>>& phases)
-{
-    std::cout << "[PyDyssol] Setting up phases..." << std::endl;
-    std::vector<SPhaseDescriptor> phaseDescriptors;
-    for (const auto& phase : phases) {
-        phaseDescriptors.push_back(SPhaseDescriptor{ static_cast<EPhase>(phase.second), phase.first });
-        std::cout << "[PyDyssol] Added phase: " << phase.first << " (State: " << phase.second << ")" << std::endl;
-    }
-    m_flowsheet.SetPhases(phaseDescriptors);
-    return true;
-}
-
 std::string PyDyssol::Initialize()
 {
     std::cout << "[PyDyssol] Initializing flowsheet..." << std::endl;
@@ -276,6 +220,16 @@ std::vector<std::pair<std::string, std::string>> PyDyssol::GetUnits()
         units.emplace_back(unit->GetName(), modelName);
     }
     return units;
+}
+
+std::map<std::string, std::string> PyDyssol::GetUnitsDict()
+{
+    std::map<std::string, std::string> unitMap;
+    for (const auto& unit : m_flowsheet.GetAllUnits()) {
+        std::string modelName = GetModelNameForUnit(unit->GetKey());
+        unitMap[unit->GetName()] = modelName;
+    }
+    return unitMap;
 }
 
 //Debug

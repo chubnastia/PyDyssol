@@ -1,6 +1,10 @@
 #include "PyDyssol.h"
 #include <iostream>
 #include <stdexcept>
+#include <map>
+#include <string>
+#include <vector>
+#include <cmath>  
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -89,7 +93,6 @@ bool PyDyssol::AddModelPath(const std::string& path)
     return true;
 }
 
-
 std::string PyDyssol::GetModelNameForUnit(const std::string& unitKey) const
 {
     for (const auto& unit : m_flowsheet.GetAllUnits())
@@ -109,23 +112,6 @@ std::string PyDyssol::GetModelNameForUnit(const std::string& unitKey) const
     return "Unknown";
 }
 
-std::map<std::string, std::string> PyDyssol::GetUnitsDict()
-{
-    std::map<std::string, std::string> unitMap;
-    for (const auto& unit : m_flowsheet.GetAllUnits()) {
-        std::string modelName = GetModelNameForUnit(unit->GetKey());
-        unitMap[unit->GetName()] = modelName;
-    }
-    return unitMap;
-}
-
-std::vector<std::pair<std::string, std::string>> PyDyssol::GetDatabaseCompounds() const {
-    std::vector<std::pair<std::string, std::string>> out;
-    for (const auto* c : m_materialsDatabase.GetCompounds())
-        out.emplace_back(c->GetKey(), c->GetName());
-    return out;
-}
-
 EPhase PyDyssol::GetPhaseByName(const std::string& phaseName) const
 {
     std::string name = phaseName;
@@ -137,3 +123,24 @@ EPhase PyDyssol::GetPhaseByName(const std::string& phaseName) const
 
     throw std::runtime_error("Unknown phase name: " + phaseName);
 }
+
+EPhase ConvertPhaseState(const py::object& state)
+{
+    if (py::isinstance<py::str>(state)) {
+        std::string val = state.cast<std::string>();
+        std::transform(val.begin(), val.end(), val.begin(), ::tolower);
+
+        if (val == "solid") return EPhase::SOLID;
+        if (val == "liquid") return EPhase::LIQUID;
+        if (val == "vapor" || val == "gas") return EPhase::VAPOR;
+
+        throw std::invalid_argument("Invalid phase name: '" + val + "'. Expected one of: 'solid', 'liquid', 'vapor' or 'gas'.");
+    }
+
+    if (py::isinstance<EPhase>(state)) {
+        return py::cast<EPhase>(state);
+    }
+
+    throw std::invalid_argument("Invalid phase value. Please enter a valid phase name: 'solid', 'liquid', 'vapor' or 'gas'.");
+}
+

@@ -1,16 +1,48 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClCompile Include="PyDyssol.cpp" />
-    <ClCompile Include="PyDyssolBindings.cpp" />
-    <ClCompile Include="PyDyssol_Feeds.cpp" />
-    <ClCompile Include="PyDyssol_Holdups.cpp" />
-    <ClCompile Include="PyDyssol_Options.cpp" />
-    <ClCompile Include="PyDyssol_Parameters.cpp" />
-    <ClCompile Include="PyDyssol_Streams.cpp" />
-    <ClCompile Include="PyDyssol_UnitStreams.cpp" />
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{ffec06ec-ef8e-42c8-8235-73683ceb2f82}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{ffd70e58-5e4a-43e1-b212-e20b3970d221}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="PyDyssol.h" />
+    <ClInclude Include="PyDyssol.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="PyDyssol.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PyDyssol_Feeds.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PyDyssol_Holdups.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PyDyssol_Options.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PyDyssol_Parameters.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PyDyssol_Streams.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PyDyssol_UnitStreams.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PyDyssol_Utils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PyDyssolBindings.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PyDyssol_Phases_Comps.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
