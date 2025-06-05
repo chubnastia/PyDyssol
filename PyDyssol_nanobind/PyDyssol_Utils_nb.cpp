@@ -1,15 +1,19 @@
-#include "PyDyssol.h"
+#include "PyDyssol_nb.h"
 #include <iostream>
 #include <stdexcept>
 #include <map>
 #include <string>
 #include <vector>
 #include <cmath>  
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
+#include <nanobind/nanobind.h> // Include nanobind headers
+#include <nanobind/stl/string.h> // For std::string bindings
+#include <nanobind/stl/vector.h> // For std::vector bindings
+#include <nanobind/stl/pair.h>   // For std::pair bindings
+#include <nanobind/stl/map.h>    // For std::map bindings
+#include <nanobind/stl/tuple.h>  // For std::tuple bindings
 
+namespace nb = nanobind;
 namespace fs = std::filesystem;
-namespace py = pybind11;
 
 std::string PhaseToString(EPhase phase)
 {
@@ -124,10 +128,10 @@ EPhase PyDyssol::GetPhaseByName(const std::string& phaseName) const
     throw std::runtime_error("Unknown phase name: " + phaseName);
 }
 
-EPhase ConvertPhaseState(const py::object& state)
+EPhase ConvertPhaseState(const nb::object& state)
 {
-    if (py::isinstance<py::str>(state)) {
-        std::string val = state.cast<std::string>();
+    if (nb::isinstance<nb::str>(state)) {
+        std::string val = nb::cast<std::string>(state);
         std::transform(val.begin(), val.end(), val.begin(), ::tolower);
 
         if (val == "solid") return EPhase::SOLID;
@@ -137,29 +141,10 @@ EPhase ConvertPhaseState(const py::object& state)
         throw std::invalid_argument("Invalid phase name: '" + val + "'. Expected one of: 'solid', 'liquid', 'vapor' or 'gas'.");
     }
 
-    if (py::isinstance<EPhase>(state)) {
-        return py::cast<EPhase>(state);
+    if (nb::isinstance<EPhase>(state)) {
+        return nb::cast<EPhase>(state);
     }
 
     throw std::invalid_argument("Invalid phase value. Please enter a valid phase name: 'solid', 'liquid', 'vapor' or 'gas'.");
-}
-
-//Grids
-// Convert EDistrTypes to std::string using DISTR_NAMES
-std::string ToString(EDistrTypes type) {
-    for (size_t i = 0; i < std::size(DISTR_TYPES); ++i) {
-        if (DISTR_TYPES[i] == type)
-            return DISTR_NAMES[i];
-    }
-    return "Unknown";
-}
-
-// Convert std::string to EDistrTypes using DISTR_NAMES
-EDistrTypes StringToDistrType(const std::string& name) {
-    for (size_t i = 0; i < std::size(DISTR_NAMES); ++i) {
-        if (name == DISTR_NAMES[i])
-            return DISTR_TYPES[i];
-    }
-    throw std::invalid_argument("Unknown distribution type: " + name);
 }
 

@@ -11,9 +11,9 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{67E6A858-50F0-4F42-8AB7-27798A0DD8F5}</ProjectGuid>
+    <ProjectGuid>{F41E72A3-65C3-4366-B29D-529ADF7F1370}</ProjectGuid>
     <RootNamespace>DyssolConsole</RootNamespace>
-    <ProjectName>PyDyssol</ProjectName>
+    <ProjectName>PyDyssol_nanobind</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -68,7 +68,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\cac4644\AppData\Local\Programs\Python\Python313\Lib\site-packages\pybind11\include;C:\Users\cac4644\.pyenv\pyenv-win\versions\3.13.3\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Libraries\robin-map\include;C:\Libraries\nanobind\include;C:\Users\cac4644\.pyenv\pyenv-win\versions\3.13.3\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link />
     <Link>
@@ -89,19 +89,20 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="PyDyssol.h" />
+    <ClInclude Include="PyDyssol_nb.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="PyDyssol.cpp" />
-    <ClCompile Include="PyDyssolBindings.cpp" />
-    <ClCompile Include="PyDyssol_Feeds.cpp" />
-    <ClCompile Include="PyDyssol_Holdups.cpp" />
-    <ClCompile Include="PyDyssol_Options.cpp" />
-    <ClCompile Include="PyDyssol_Parameters.cpp" />
-    <ClCompile Include="PyDyssol_Phases_Comps.cpp" />
-    <ClCompile Include="PyDyssol_Streams.cpp" />
-    <ClCompile Include="PyDyssol_UnitStreams.cpp" />
-    <ClCompile Include="PyDyssol_Utils.cpp" />
+    <ClCompile Include="C:\Libraries\nanobind\src\nb_combined.cpp" />
+    <ClCompile Include="PyDyssol_nb.cpp" />
+    <ClCompile Include="PyDyssolBindings_nb.cpp" />
+    <ClCompile Include="PyDyssol_Feeds_nb.cpp" />
+    <ClCompile Include="PyDyssol_Holdups_nb.cpp" />
+    <ClCompile Include="PyDyssol_Options_nb.cpp" />
+    <ClCompile Include="PyDyssol_Parameters_nb.cpp" />
+    <ClCompile Include="PyDyssol_Phases_Comps_nb.cpp" />
+    <ClCompile Include="PyDyssol_Streams_nb.cpp" />
+    <ClCompile Include="PyDyssol_UnitStreams_nb.cpp" />
+    <ClCompile Include="PyDyssol_Utils_nb.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

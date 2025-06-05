@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{ffec06ec-ef8e-42c8-8235-73683ceb2f82}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{ffd70e58-5e4a-43e1-b212-e20b3970d221}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="PyDyssol_nb.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="PyDyssol_nb.cpp" />
+    <ClCompile Include="PyDyssolBindings_nb.cpp" />
+    <ClCompile Include="PyDyssol_Feeds_nb.cpp" />
+    <ClCompile Include="PyDyssol_Holdups_nb.cpp" />
+    <ClCompile Include="PyDyssol_Options_nb.cpp" />
+    <ClCompile Include="PyDyssol_Parameters_nb.cpp" />
+    <ClCompile Include="PyDyssol_Phases_Comps_nb.cpp" />
+    <ClCompile Include="PyDyssol_Streams_nb.cpp" />
+    <ClCompile Include="PyDyssol_UnitStreams_nb.cpp" />
+    <ClCompile Include="PyDyssol_Utils_nb.cpp" />
+    <ClCompile Include="C:\Libraries\nanobind\src\nb_combined.cpp" />
+  </ItemGroup>
+</Project>

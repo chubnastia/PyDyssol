@@ -18,6 +18,8 @@ std::string PhaseToString(EPhase phase);
 EOverall StringToEOverall(const std::string& name);
 std::string FormatDouble(double value);
 EPhase ConvertPhaseState(const pybind11::object& state);
+EDistrTypes StringToDistrType(const std::string& name);
+std::string ToString(EDistrTypes type);
 
 class PyDyssol
 {
@@ -165,6 +167,11 @@ public:
     pybind11::dict GetOptions() const;
     void SetOptions(const pybind11::dict& options);
     pybind11::dict GetOptionsMethods() const;
+
+    //Grids
+    std::vector<pybind11::dict> GetGrids() const;
+    void SetGrids(const std::vector<std::map<std::string, pybind11::object>>& grids);
+    void AddGrids(const std::vector<std::map<std::string, pybind11::object>>& grids);
 
     //Debug
     void PyDyssol::DebugUnitPorts(const std::string& unitName);

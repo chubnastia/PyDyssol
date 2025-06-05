@@ -1,6 +1,6 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.13.35825.156 d17.13
+VisualStudioVersion = 17.13.35825.156
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Dyssol", "DyssolGUI\DyssolGUI.vcxproj", "{06FC09C8-3DBA-40B5-A5D2-5A33CD23F917}"
 EndProject
@@ -169,6 +169,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MainWindow", "GUIDialogs\Ma
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PyDyssol", "PyDyssol\PyDyssol.vcxproj", "{67E6A858-50F0-4F42-8AB7-27798A0DD8F5}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PyDyssol_nanobind", "PyDyssol_nanobind\PyDyssol_nanobind.vcxproj", "{F41E72A3-65C3-4366-B29D-529ADF7F1370}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -426,6 +428,10 @@ Global
 		{67E6A858-50F0-4F42-8AB7-27798A0DD8F5}.Debug|x64.Build.0 = Debug|x64
 		{67E6A858-50F0-4F42-8AB7-27798A0DD8F5}.Release|x64.ActiveCfg = Release|x64
 		{67E6A858-50F0-4F42-8AB7-27798A0DD8F5}.Release|x64.Build.0 = Release|x64
+		{F41E72A3-65C3-4366-B29D-529ADF7F1370}.Debug|x64.ActiveCfg = Debug|x64
+		{F41E72A3-65C3-4366-B29D-529ADF7F1370}.Debug|x64.Build.0 = Debug|x64
+		{F41E72A3-65C3-4366-B29D-529ADF7F1370}.Release|x64.ActiveCfg = Release|x64
+		{F41E72A3-65C3-4366-B29D-529ADF7F1370}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

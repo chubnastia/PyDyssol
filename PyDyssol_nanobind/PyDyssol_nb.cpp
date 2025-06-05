@@ -1,4 +1,4 @@
-#include "PyDyssol.h"
+#include "PyDyssol_nb.h"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -7,15 +7,16 @@
 #include <chrono>
 #include <iomanip>    // for std::setprecision
 #include <sstream>    // for std::ostringstream
-#include <pybind11/pybind11.h> 
-#include <pybind11/stl.h>      // For std::vector and std::pair bindings
-#include <pybind11/stl_bind.h>      // For STL bindings with containers
-#include <SaveLoadManager.h>
-#include <algorithm> // For std::find_if
-#include "MultidimensionalGrid.h"
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/vector.h>
+#include <nanobind/stl/map.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/pair.h>
+#include <nanobind/stl/tuple.h>
+#include "SaveLoadManager.h"
 
 namespace fs = std::filesystem;
-namespace py = pybind11; // Add namespace alias
+namespace nb = nanobind; // Add namespace alias
 
 PyDyssol::PyDyssol(const std::string& materialsPath, const std::string& modelsPath)
     : m_flowsheet(&m_modelsManager, &m_materialsDatabase),
@@ -232,83 +233,6 @@ std::map<std::string, std::string> PyDyssol::GetUnitsDict()
     }
     return unitMap;
 }
-
-//Grids
-std::vector<py::dict> PyDyssol::GetGrids() const {
-    std::vector<py::dict> result;
-
-    for (const CGridDimension* dim : m_flowsheet.GetGrid().GetGridDimensions()) {
-        py::dict grid;
-        std::string typeStr = ToString(dim->DimensionType());
-        grid["type"] = py::str(typeStr);
-
-        if (const auto* num = dynamic_cast<const CGridDimensionNumeric*>(dim)) {
-            grid["grid"] = py::cast(num->Grid());
-        }
-        else if (const auto* sym = dynamic_cast<const CGridDimensionSymbolic*>(dim)) {
-            grid["grid"] = py::cast(sym->Grid());
-        }
-        else {
-            throw std::runtime_error("Unknown grid dimension type.");
-        }
-
-        result.push_back(grid);
-    }
-
-    return result;
-}
-
-void PyDyssol::SetGrids(const std::vector<std::map<std::string, py::object>>& grids) {
-    auto& gridMgr = const_cast<CMultidimensionalGrid&>(m_flowsheet.GetGrid());
-    gridMgr.Clear();
-    AddGrids(grids);
-}
-
-void PyDyssol::AddGrids(const std::vector<std::map<std::string, py::object>>& grids) {
-    auto& gridMgr = const_cast<CMultidimensionalGrid&>(m_flowsheet.GetGrid());
-
-    for (const auto& grid : grids) {
-        std::string typeStr = py::cast<std::string>(grid.at("type"));
-        EDistrTypes type = StringToDistrType(typeStr);
-
-        py::list pyList = grid.at("grid");
-        if (py::len(pyList) == 0)
-            throw std::runtime_error("Empty grid provided for type: " + typeStr);
-
-        bool isSymbolic = py::isinstance<py::str>(pyList[0]);
-        try {
-            if (isSymbolic) {
-                std::vector<std::string> values = py::cast<std::vector<std::string>>(pyList);
-
-                if (gridMgr.HasDimension(type))
-                    std::cout << "[PyDyssol] Warning: Replacing existing grid of type: " << typeStr << std::endl;
-
-                gridMgr.RemoveDimension(type);
-                gridMgr.AddSymbolicDimension(type, values);
-            }
-            else {
-                std::vector<double> values = py::cast<std::vector<double>>(pyList);
-
-                // Optional: basic validation to ensure strictly increasing
-                for (size_t i = 1; i < values.size(); ++i) {
-                    if (values[i] <= values[i - 1])
-                        throw std::runtime_error("Numeric grid values must be strictly increasing.");
-                }
-
-                if (gridMgr.HasDimension(type))
-                    std::cout << "[PyDyssol] Warning: Replacing existing grid of type: " << typeStr << std::endl;
-
-                gridMgr.RemoveDimension(type);
-                gridMgr.AddNumericDimension(type, values);
-            }
-        }
-        catch (const std::exception& e) {
-            std::cerr << "[PyDyssol] Error adding grid of type " << typeStr << ": " << e.what() << std::endl;
-        }
-    }
-}
-
-
 
 //Debug
 void PyDyssol::DebugUnitPorts(const std::string& unitName)
