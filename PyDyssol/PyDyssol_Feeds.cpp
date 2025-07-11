@@ -62,6 +62,7 @@ pybind11::dict PyDyssol::GetUnitFeedDistribution(const std::string& unitName, co
     const auto& gridDims = m_flowsheet.GetGrid().GetGridDimensions();
     for (const CGridDimension* dim : gridDims) {
         EDistrTypes type = dim->DimensionType();
+        if (type == EDistrTypes::DISTR_COMPOUNDS) continue;
         int idx = GetDistributionTypeIndex(type);
         if (idx < 0) continue;
         std::vector<double> dist = feed->GetDistribution(time, type);
@@ -402,7 +403,8 @@ void PyDyssol::SetUnitFeed(const std::string& unitName, const std::string& feedN
     if (!unit) throw std::runtime_error("Unit not found: " + unitName);
 
     CStream* feed = unit->GetModel()->GetStreamsManager().GetFeed(feedName);
-    if (!feed) throw std::runtime_error("Feed not found: " + feedName + " in unit " + unitName);
+    CStream* feedInit = unit->GetModel()->GetStreamsManager().GetFeedInit(feedName);
+    if (!feed || !feedInit) throw std::runtime_error("Feed not found: " + feedName + " in unit " + unitName);
 
     const auto& compounds = m_flowsheet.GetCompounds();
     const auto& gridDims = m_flowsheet.GetGrid().GetGridDimensions();
@@ -436,12 +438,15 @@ void PyDyssol::SetUnitFeed(const std::string& unitName, const std::string& feedN
                 throw std::runtime_error("Unknown compound: " + compoundName);
 
             feed->SetCompoundMass(time, comp->GetKey(), phase, value);
+			feedInit->SetCompoundMass(time, comp->GetKey(), phase, value);
             phaseMassMap[phase] += value;
         }
 
         // Finalize phase masses
-        for (const auto& [phase, total] : phaseMassMap)
+        for (const auto& [phase, total] : phaseMassMap) {
             feed->SetPhaseMass(time, phase, total);
+            feedInit->SetPhaseMass(time, phase, total);
+        }
     }
 
     // === Overall ===
@@ -451,6 +456,7 @@ void PyDyssol::SetUnitFeed(const std::string& unitName, const std::string& feedN
             std::string name = item.first.cast<std::string>();
             double value = item.second.cast<double>();
             feed->SetOverallProperty(time, StringToEOverall(name), value);
+			feedInit->SetOverallProperty(time, StringToEOverall(name), value);
         }
     }
 
@@ -476,6 +482,7 @@ void PyDyssol::SetUnitFeed(const std::string& unitName, const std::string& feedN
             if (norm.size() != current.size())
                 throw std::runtime_error("Size mismatch in distribution '" + name + "'");
             feed->SetDistribution(time, distrType, norm);
+			feedInit->SetDistribution(time, distrType, norm);
         }
     }
 }
@@ -498,6 +505,80 @@ void PyDyssol::SetUnitFeed(const std::string& unitName, double time, const py::d
 
 void PyDyssol::SetUnitFeed(const std::string& unitName, const std::string& feedName, const py::dict& data)
 {
-    const double time = 0.0;
-    SetUnitFeed(unitName, feedName, time, data);
+    // 1. Try to find timepoints from any section
+    std::vector<double> timepoints;
+
+    if (data.contains("overall") && py::isinstance<py::dict>(data["overall"])) {
+        py::dict overall = data["overall"];
+        if (overall.contains("timepoints"))
+            timepoints = overall["timepoints"].cast<std::vector<double>>();
+    }
+    if (timepoints.empty() && data.contains("composition")) {
+        py::dict comp = data["composition"];
+        if (comp.contains("timepoints"))
+            timepoints = comp["timepoints"].cast<std::vector<double>>();
+    }
+    if (timepoints.empty() && data.contains("distributions")) {
+        py::dict dist = data["distributions"];
+        if (dist.contains("timepoints"))
+            timepoints = dist["timepoints"].cast<std::vector<double>>();
+    }
+
+    // 2. If no timepoints fallback to t = 0.0
+    if (timepoints.empty()) {
+        this->SetUnitFeed(unitName, feedName, 0.0, data);
+        return;
+    }
+
+    // 3. Loop over timepoints and slice each section manually
+    for (size_t i = 0; i < timepoints.size(); ++i) {
+        double t = timepoints[i];
+        py::dict slice;
+
+        // === Slice overall ===
+        if (data.contains("overall")) {
+            py::dict slicedOverall;
+            py::dict overall = data["overall"];
+            for (auto item : overall) {
+                std::string key = item.first.cast<std::string>();
+                if (key == "timepoints") continue;
+                std::vector<double> vec = py::cast<std::vector<double>>(item.second);
+                if (i < vec.size())
+                    slicedOverall[key.c_str()] = vec[i];
+            }
+            slice["overall"] = slicedOverall;
+        }
+
+        // === Slice composition ===
+        if (data.contains("composition")) {
+            py::dict slicedComp;
+            py::dict comp = data["composition"];
+            for (auto item : comp) {
+                std::string key = item.first.cast<std::string>();
+                if (key == "timepoints") continue;
+                std::vector<double> vec = py::cast<std::vector<double>>(item.second);
+                if (i < vec.size())
+                    slicedComp[key.c_str()] = vec[i];
+            }
+            slice["composition"] = slicedComp;
+        }
+
+        // === Slice distributions ===
+        if (data.contains("distributions")) {
+            py::dict slicedDist;
+            py::dict dist = data["distributions"];
+            for (auto item : dist) {
+                std::string key = item.first.cast<std::string>();
+                if (key == "timepoints") continue;
+                std::vector<std::vector<double>> mat = py::cast<std::vector<std::vector<double>>>(item.second);
+                if (i < mat.size())
+                    slicedDist[key.c_str()] = mat[i];
+            }
+            slice["distributions"] = slicedDist;
+        }
+
+        // 4. Apply sliced feed
+        this->SetUnitFeed(unitName, feedName, t, slice);
+    }
 }
+

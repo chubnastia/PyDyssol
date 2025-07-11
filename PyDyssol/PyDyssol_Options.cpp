@@ -89,6 +89,7 @@ py::dict PyDyssol::GetOptions() const
 void PyDyssol::SetOptions(const py::dict& options)
 {
     CParametersHolder* p = m_flowsheet.GetParameters();
+    p->SetDefaultValues();
 
     auto get_double = [&](const char* key, auto setter) {
         if (options.contains(key)) {

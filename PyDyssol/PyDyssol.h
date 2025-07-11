@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <utility>
 #include <pybind11/pybind11.h> // Include pybind11 headers
 #include <pybind11/stl.h>      // For std::vector and std::pair bindings
 #include <pybind11/stl_bind.h>      // For STL bindings with containers
@@ -13,13 +14,6 @@
 #include "../SimulatorCore/ModelsManager.h"
 #include "../HDF5Handler/H5Handler.h"
 #include "UnitParameters.h"
-
-std::string PhaseToString(EPhase phase);
-EOverall StringToEOverall(const std::string& name);
-std::string FormatDouble(double value);
-EPhase ConvertPhaseState(const pybind11::object& state);
-EDistrTypes StringToDistrType(const std::string& name);
-std::string ToString(EDistrTypes type);
 
 class PyDyssol
 {
@@ -31,6 +25,10 @@ private:
     std::string m_defaultMaterialsPath;     // Default path for materials database
     std::string m_defaultModelsPath;        // Default path for model units
     bool m_isInitialized;                   // Flag to track initialization state
+    bool m_isDatabaseLoaded;                // Flag to track database load state
+    bool m_isModelsLoaded;                  // Flag to track model path load state
+	bool PyDyssol::ValidateFlowsheetState() const; // Validate the current state of the flowsheet
+    bool PyDyssol::SetCompoundsFallback(const std::vector<std::string>& _compoundKeys);
 
 public:
     PyDyssol(const std::string& materialsPath = "D:/Dyssol/Materials.dmdb",
@@ -43,9 +41,27 @@ public:
     void Simulate(double endTime = -1.0); // Default: -1 means no override
     std::string Initialize();
     void DebugFlowsheet();
+    //Flowsheet
+    std::vector<std::string> GetAvailableModelNames() const;
+    bool SetTopology(const pybind11::dict& config, bool initialize = true);
+    pybind11::list GetTopology() const;
+    std::string ValidateCalculationSequence() const;
+    
+    // New methods for unit configuration
+    pybind11::dict GetUnitConfig(const std::string& unitName) const;
+    void SetUnitConfig(const std::string& unitName, const pybind11::dict& config);
+    pybind11::dict GetModelInfo(const std::string& unitName) const;
+
+    // Stream management
+    CStream* AddStream(const std::string& streamName);
+    const CStream* GetStreams_flowsheet(const std::string& streamName) const;
+
+    //Compounds
     std::vector<std::pair<std::string, std::string>> GetDatabaseCompounds() const;
     std::vector<std::pair<std::string, std::string>> GetCompounds() const;
-    bool SetCompounds(const std::vector<std::string>& compounds);
+
+    bool SetCompounds(const std::vector<std::string>& compoundNames);
+
     bool AddCompound(const std::string& key);
 
     pybind11::list GetPhases() const;
@@ -71,7 +87,6 @@ public:
     std::vector<std::string> GetComboOptions(const std::string& unitName, const std::string& paramName) const;
     std::vector<std::pair<double, double>> GetDependentParameterValues(const std::string& unitName, const std::string& paramName) const;
     std::map<std::string, std::vector<std::pair<double, double>>> GetDependentParameters(const std::string& unitName) const;
-    EPhase GetPhaseByName(const std::string& phaseName) const;
 
 
     //Holdups
@@ -171,12 +186,40 @@ public:
     //Grids
     std::vector<pybind11::dict> GetGrids() const;
     void SetGrids(const std::vector<std::map<std::string, pybind11::object>>& grids);
-    void AddGrids(const std::vector<std::map<std::string, pybind11::object>>& grids);
+    void AddGrid(const std::map<std::string, pybind11::object>& gridData);
+    bool IsGridValid(const std::map<std::string, pybind11::object>& gridData) const;
 
     //Debug
     void PyDyssol::DebugUnitPorts(const std::string& unitName);
     void PyDyssol::DebugStreamData(const std::string& streamName, double time);
 
 };
+
+std::string PhaseToString(EPhase phase);
+EOverall StringToEOverall(const std::string& name);
+std::string FormatDouble(double value);
+EPhase ConvertPhaseState(const pybind11::object& state);
+EDistrTypes StringToDistrType(const std::string& name);
+std::string ToString(EDistrTypes type);
+std::string GetAllowedDistrNames();
+bool IsValidDistributionName(const std::string& name);
+EPhase GetPhaseByName(const std::string& phaseName);
+void print_grid_data(const pybind11::list& data_list);
+void print_unit_params(const pybind11::dict& data_dict);
+void print_holdup_data(const pybind11::dict& data_dict);
+void print_options(const pybind11::dict& data_dict);
+using UnitParameterVariant = std::variant<
+    bool,
+    double,
+    std::string,
+    int64_t,
+    uint64_t,
+    std::vector<double>,
+    std::vector<int64_t>,
+    std::vector<uint64_t>,
+    std::vector<std::pair<double, double>>,
+    std::vector<pybind11::dict>
+>;
+
 
 #endif // PYDYSSOL_H

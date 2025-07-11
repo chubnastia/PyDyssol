@@ -7,21 +7,18 @@
 namespace fs = std::filesystem;
 namespace py = pybind11;
 
-
 //Holdups
-std::vector<std::string> PyDyssol::GetUnitHoldups(const std::string& unitName) const
-{
-    const auto* unit = m_flowsheet.GetUnitByName(unitName);
-    if (!unit) throw std::runtime_error("Unit not found: " + unitName);
-
-    const auto& holdups = unit->GetModel()->GetStreamsManager().GetHoldups();
+std::vector<std::string> PyDyssol::GetUnitHoldups(const std::string& unitName) const {
+    const CUnitContainer* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit)
+        throw std::runtime_error("Unit not found: " + unitName);
     std::vector<std::string> result;
-    result.reserve(holdups.size());
-    for (const auto* holdup : holdups)
+    const auto& holdups = unit->GetModel()->GetStreamsManager().GetHoldups();
+    for (const auto* holdup : holdups) {
         result.push_back(holdup->GetName());
-
+    }
     return result;
-}
+} 
 
 std::map<std::string, double> PyDyssol::GetUnitHoldupOverall(const std::string& unitName, double time) const {
     std::map<std::string, double> overall;
@@ -120,6 +117,7 @@ pybind11::dict PyDyssol::GetUnitHoldupDistribution(const std::string& unitName, 
 
     for (const CGridDimension* dim : gridDims) {
         EDistrTypes distrType = dim->DimensionType();
+        if (distrType == EDistrTypes::DISTR_COMPOUNDS) continue;
         int index = GetDistributionTypeIndex(distrType);
         if (index < 0) continue;
         std::string name = DISTR_NAMES[index];
@@ -147,6 +145,7 @@ pybind11::dict PyDyssol::GetUnitHoldupDistribution(const std::string& unitName, 
     const auto& gridDims = m_flowsheet.GetGrid().GetGridDimensions();
     for (const CGridDimension* dim : gridDims) {
         EDistrTypes type = dim->DimensionType();
+        if (type == EDistrTypes::DISTR_COMPOUNDS) continue;
         int idx = GetDistributionTypeIndex(type);
         if (idx >= 0) {
             std::vector<double> dist = holdup->GetDistribution(time, type);
@@ -221,6 +220,7 @@ pybind11::dict PyDyssol::GetUnitHoldup(const std::string& unitName, const std::s
     const auto& gridDims = m_flowsheet.GetGrid().GetGridDimensions();
     for (const CGridDimension* dim : gridDims) {
         EDistrTypes type = dim->DimensionType();
+        if (type == EDistrTypes::DISTR_COMPOUNDS) continue;
         int idx = GetDistributionTypeIndex(type);
         if (idx >= 0) {
             std::vector<double> dist = holdup->GetDistribution(time, type);
@@ -469,6 +469,7 @@ pybind11::dict PyDyssol::GetUnitHoldupDistribution(const std::string& unitName, 
         timeList.push_back(t);
         for (const CGridDimension* dim : m_flowsheet.GetGrid().GetGridDimensions()) {
             EDistrTypes type = dim->DimensionType();
+            if (type == EDistrTypes::DISTR_COMPOUNDS) continue;
             int idx = GetDistributionTypeIndex(type);
             if (idx < 0) continue;
 
@@ -503,21 +504,41 @@ pybind11::dict PyDyssol::GetUnitHoldup(const std::string& unitName, const std::s
 }
 
 
-static void SetHoldupValues(CHoldup* holdup, double time, const pybind11::dict& data, const std::vector<const CGridDimension*>& gridDims)
+static void SetHoldupValues(CHoldup* holdup, double time, const py::dict& data, const std::vector<const CGridDimension*>& gridDims, const CMaterialsDatabase& materialsDB)
 {
     // === Set composition ===
     if (data.contains("composition")) {
-        const auto compDict = data["composition"].cast<pybind11::dict>();
+        const auto compDict = data["composition"].cast<py::dict>();
         for (const auto& item : compDict) {
-            std::string name = item.first.cast<std::string>();
+            std::string key = item.first.cast<std::string>();
             double value = item.second.cast<double>();
-            holdup->SetCompoundMass(time, name, EPhase::SOLID, value);
+
+            size_t split = key.find(" [");
+            if (split == std::string::npos || key.back() != ']') {
+                throw std::runtime_error("[PyDyssol] Invalid composition key format: '" + key + "'. Expected format: 'Compound [Phase]'");
+            }
+            std::string compoundName = key.substr(0, split);
+            std::string phaseName = key.substr(split + 2, key.length() - split - 3);
+
+            const CCompound* compound = materialsDB.GetCompoundByName(compoundName);
+            if (!compound)
+                throw std::runtime_error("[PyDyssol] Unknown compound: " + compoundName);
+
+            EPhase phase;
+            try {
+                phase = GetPhaseByName(phaseName);
+            }
+            catch (const std::exception& e) {
+                throw std::runtime_error("[PyDyssol] Invalid phase in composition key '" + key + "': " + e.what());
+            }
+
+            holdup->SetCompoundMass(time, compound->GetKey(), phase, value);
         }
     }
 
     // === Set overall properties ===
     if (data.contains("overall")) {
-        const auto overallDict = data["overall"].cast<pybind11::dict>();
+        const auto overallDict = data["overall"].cast<py::dict>();
         for (const auto& item : overallDict) {
             std::string name = item.first.cast<std::string>();
             double value = item.second.cast<double>();
@@ -535,7 +556,7 @@ static void SetHoldupValues(CHoldup* holdup, double time, const pybind11::dict& 
 
     // === Set distributions ===
     if (data.contains("distributions")) {
-        const auto distDict = data["distributions"].cast<pybind11::dict>();
+        const auto distDict = data["distributions"].cast<py::dict>();
         for (const auto& item : distDict) {
             std::string distrName = item.first.cast<std::string>();
             std::vector<double> values = item.second.cast<std::vector<double>>();
@@ -551,6 +572,7 @@ static void SetHoldupValues(CHoldup* holdup, double time, const pybind11::dict& 
         }
     }
 }
+
 
 void PyDyssol::SetUnitHoldup(const std::string& unitName, const pybind11::dict& data)
 {
@@ -569,8 +591,8 @@ void PyDyssol::SetUnitHoldup(const std::string& unitName, const pybind11::dict& 
 
     const auto& gridDims = m_flowsheet.GetGrid().GetGridDimensions();
 
-    SetHoldupValues(holdupsWork.front(), time, data, gridDims);
-    SetHoldupValues(holdupsInit.front(), time, data, gridDims);
+    SetHoldupValues(holdupsWork.front(), time, data, gridDims, m_materialsDatabase);
+    SetHoldupValues(holdupsInit.front(), time, data, gridDims, m_materialsDatabase);
 }
 
 void PyDyssol::SetUnitHoldup(const std::string& unitName, const std::string& holdupName, const pybind11::dict& data)
@@ -589,6 +611,6 @@ void PyDyssol::SetUnitHoldup(const std::string& unitName, const std::string& hol
         throw std::runtime_error("Holdup not found: " + holdupName);
 
     const auto& gridDims = m_flowsheet.GetGrid().GetGridDimensions();
-    SetHoldupValues(holdupWork, time, data, gridDims);
-    SetHoldupValues(holdupInit, time, data, gridDims);
+    SetHoldupValues(holdupWork, time, data, gridDims, m_materialsDatabase);
+    SetHoldupValues(holdupInit, time, data, gridDims, m_materialsDatabase);
 }

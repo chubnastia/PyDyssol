@@ -145,7 +145,7 @@ std::map<std::string, std::tuple<pybind11::object, std::string, std::string>> Py
     const auto& mgr = model->GetUnitParametersManager();
     auto activeParams = mgr.GetActiveParameters();
 
-    std::cout << "[PyDyssol] Active parameters for unit " << unitName << ":" << std::endl;
+    std::cout << "[PyDyssol] Active parameters colected for unit " << unitName << ":" << std::endl;
 
     std::map<std::string, std::tuple<pybind11::object, std::string, std::string>> result;
     for (const auto* param : activeParams) {
@@ -174,7 +174,7 @@ std::map<std::string, std::tuple<pybind11::object, std::string, std::string>> Py
     const auto& mgr = model->GetUnitParametersManager();
     auto allParams = mgr.GetParameters();
 
-    std::cout << "[PyDyssol] All parameters for unit " << unitName << ":" << std::endl;
+    std::cout << "[PyDyssol] All parameters collected for unit " << unitName << ":" << std::endl;
 
     std::map<std::string, std::tuple<pybind11::object, std::string, std::string>> result;
     for (const auto* param : allParams) {
@@ -523,13 +523,13 @@ void PyDyssol::SetUnitParameter(const std::string& unitName, const std::string& 
         throw std::runtime_error("Unsupported value type for parameter " + paramName);
     }
 
-    std::string error = m_flowsheet.Initialize();
-    if (!error.empty()) {
-        std::cerr << "[PyDyssol] Flowsheet initialization failed after setting " << paramName << ": " << error << std::endl;
-    }
-    else {
-        std::cout << "[PyDyssol] Called m_flowsheet.Initialize() after setting " << paramName << " for unit " << unitName << std::endl;
-    }
+    //std::string error = m_flowsheet.Initialize();
+   // if (!error.empty()) {
+    //    std::cerr << "[PyDyssol] Flowsheet initialization failed after setting " << paramName << ": " << error << std::endl;
+   // }
+    //else {
+     //   std::cout << "[PyDyssol] Called m_flowsheet.Initialize() after setting " << paramName << " for unit " << unitName << std::endl;
+    //}
 }
 
 pybind11::object PyDyssol::GetUnitParameter(const std::string& unitName, const std::string& paramName) const
