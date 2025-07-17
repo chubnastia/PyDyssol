@@ -18,15 +18,17 @@
 namespace fs = std::filesystem;
 namespace py = pybind11; // Add namespace alias
 
-PyDyssol::PyDyssol(const std::string& materialsPath, const std::string& modelsPath)
+PyDyssol::PyDyssol(const std::string& materialsPath, const std::string& modelsPath, bool debug)
     : m_flowsheet(&m_modelsManager, &m_materialsDatabase),
     m_defaultMaterialsPath(materialsPath),
     m_defaultModelsPath(modelsPath),
-    m_isInitialized(false),
     m_isDatabaseLoaded(false),
-    m_isModelsLoaded(false)
+    m_isModelsLoaded(false),
+    m_debug(debug)
 {
     m_simulator.SetFlowsheet(&m_flowsheet);
+    if (m_debug)
+        std::cout << "[PyDyssol] Dyssol opened in Debug mode\n";
     if (!LoadMaterialsDatabase(m_defaultMaterialsPath)) {
         throw std::runtime_error("Failed to load default materials database: " + materialsPath);
     }
@@ -64,14 +66,29 @@ bool PyDyssol::OpenFlowsheet(const std::string& filePath)
     }
 
     handler.Close();
-    std::cout << "[PyDyssol] Flowsheet loaded successfully." << std::endl;
+    if (m_debug) {
+        std::cout << "[PyDyssol] Flowsheet loaded successfully." << std::endl;
 
-    // Post-load check
-    std::cout << "[PyDyssol] Post-load check - Units: " << m_flowsheet.GetAllUnits().size()
-        << ", Streams: " << m_flowsheet.GetAllStreams().size() << std::endl;
-    DebugFlowsheet();
+        // Post-load check
+        std::cout << "[PyDyssol] Post-load check - Units: " << m_flowsheet.GetAllUnits().size()
+            << ", Streams: " << m_flowsheet.GetAllStreams().size() << std::endl;
+        DebugFlowsheet();
+    }
     Initialize();
     return true;
+}
+
+void PyDyssol::CloseFlowsheet()
+{
+    std::cout << "[PyDyssol] Closing current flowsheet..." << std::endl;
+
+    m_flowsheet.Clear();                      // Clears all flowsheet data
+    m_simulator.SetFlowsheet(&m_flowsheet);   // Re-bind simulator to the new (cleared) flowsheet
+
+    // Reconnect shared resources
+    m_flowsheet.SetMaterialsDatabase(&m_materialsDatabase);
+
+    std::cout << "[PyDyssol] Flowsheet closed and reset." << std::endl;
 }
 
 bool PyDyssol::SaveFlowsheet(const std::string& filePath)
@@ -151,26 +168,22 @@ void PyDyssol::DebugFlowsheet()
 
 std::string PyDyssol::Initialize()
 {
-    std::cout << "[PyDyssol] Initializing flowsheet..." << std::endl;
     std::string error = m_flowsheet.Initialize();
     if (!error.empty()) {
         std::cerr << "[PyDyssol] Initialization failed: " << error << std::endl;
     }
-    else {
+    else if (m_debug) {
+        std::cout << "[PyDyssol] Initializing flowsheet..." << std::endl;
         std::cout << "[PyDyssol] Flowsheet initialized successfully." << std::endl;
-        m_isInitialized = true;
     }
     return error;
 }
 
 void PyDyssol::Simulate(double endTime)
 {
-    if (!m_isInitialized) {
-        std::string error = Initialize();
-        if (!error.empty())
-            throw std::runtime_error("Flowsheet initialization failed: " + error);
-        m_isInitialized = true;
-    }
+    std::string error = Initialize();
+    if (!error.empty())
+       throw std::runtime_error("Flowsheet initialization failed: " + error);
 
     // Get simulation time range from CParametersHolder
     CParametersHolder* parameters = m_flowsheet.GetParameters();
@@ -216,6 +229,7 @@ void PyDyssol::Simulate(double endTime)
     std::cout << "[PyDyssol] Simulation finished in " << std::fixed << std::setprecision(3) << seconds << " [s]" << std::endl;
 }
 
+// Flowsheet
 pybind11::list PyDyssol::GetTopology() const
 {
     pybind11::list topology;
@@ -234,7 +248,7 @@ pybind11::list PyDyssol::GetTopology() const
         if (unit->GetModel()) {
             for (const CUnitPort* port : unit->GetModel()->GetPortsManager().GetAllPorts()) {
                 std::string portName = port->GetName();
-                std::string streamName = port->GetStream() ? port->GetStream()->GetKey() : "";
+                std::string streamName = port->GetStream() ? port->GetStream()->GetName() : "";
                 ports[portName.c_str()] = pybind11::dict(pybind11::arg("stream") = streamName);
             }
         }
@@ -242,11 +256,9 @@ pybind11::list PyDyssol::GetTopology() const
 
         topology.append(unitConfig);
     }
-    std::cout << "[PyDyssol] Retrieved topology with " << py::len(topology) << " units" << std::endl;
     return topology;
 }
 
-// Flowsheet
 bool PyDyssol::SetTopology(const py::dict& config, bool initialize)
 {
     std::vector<std::string> compoundBackup;
@@ -310,54 +322,77 @@ bool PyDyssol::SetTopology(const py::dict& config, bool initialize)
                 std::cout << "[PyDyssol] Compounds set: " << m_flowsheet.GetCompoundsNumber() << std::endl;
             }
 
+            std::set<std::string> holdupUnits;
+            if (config.contains("holdups")) {
+                for (auto _h : config["holdups"]) {
+                    py::dict d = py::cast<py::dict>(_h);
+                    holdupUnits.insert(d["unit"].cast<std::string>());
+                }
+            }
+
             if (config.contains("feeds")) {
-                for (const auto& feed : config["feeds"]) {
-                    py::dict d = py::cast<py::dict>(feed);
-                    std::string unit = py::cast<std::string>(d["unit"]);
-                    std::string feedName = py::cast<std::string>(d["feed"]);
+                for (auto _f : config["feeds"]) {
+                    py::dict   d = py::cast<py::dict>(_f);
+                    std::string unit = d["unit"].cast<std::string>();
+
+                    std::string feedName;
+                    if (d.contains("feed")) {
+                        feedName = d["feed"].cast<std::string>();
+                    }
+                    else {
+                        auto feeds = this->GetUnitFeeds(unit);
+                        if (feeds.empty())
+                            throw std::runtime_error("No feeds defined for unit: " + unit);
+                        feedName = feeds.front();
+                    }
 
                     try {
-                        if (d.contains("timepoints")) {
-                            double t = d["timepoints"].cast<double>();
-                            this->SetUnitFeed(unit, feedName, t, d);
-                        }
-                        else {
-                            this->SetUnitFeed(unit, feedName, d);  // supports timepoints
-                        }
-                        CUnitContainer* unitContainer = m_flowsheet.GetUnitByName(unit);
-                        if (unitContainer) {
-                            CStream* feedStream = unitContainer->GetModel()->GetStreamsManager().GetFeed(feedName);
-                            if (feedStream) {
-                                double massFlow = feedStream->GetMassFlow(0.0);  // always safe to check at t=0
+                        this->SetUnitFeed(unit, feedName, d);
+
+                        if (!holdupUnits.count(unit)) {
+                            auto hols = this->GetUnitHoldups(unit);
+                            if (!hols.empty()) {
+                                this->SetUnitHoldup(unit, hols.front(), d);
                             }
-                            else {
-                                std::cerr << "[PyDyssol][DEBUG] Failed to retrieve feed stream '"
-                                    << feedName << "' for unit '" << unit << "'" << std::endl;
-                            }
-                        }
-                        else {
-                            std::cerr << "[PyDyssol][DEBUG] Failed to retrieve unit '" << unit << "'" << std::endl;
                         }
                     }
                     catch (const std::exception& e) {
-                        std::cerr << "[PyDyssol] Warning: Failed to set feed for unit '" << unit << "': " << e.what() << std::endl;
+                        std::cerr << "[PyDyssol] Warning: failed to set feed for unit '"
+                            << unit << "': " << e.what() << "\n";
                     }
                 }
             }
 
-
             if (config.contains("holdups")) {
-                for (const auto& holdupDict : config["holdups"].cast<std::vector<py::dict>>()) {
-                    const std::string unitName = holdupDict["unit"].cast<std::string>();
-                    const std::string holdupName = holdupDict["holdup"].cast<std::string>();
+                for (auto _h : config["holdups"]) {
+                    py::dict   d = py::cast<py::dict>(_h);
+                    std::string unit = d["unit"].cast<std::string>();
 
-                    py::dict holdupData;
-                    for (auto item : holdupDict) {
-                        std::string key = item.first.cast<std::string>();
-                        if (key != "unit" && key != "holdup")
-                            holdupData[key.c_str()] = item.second;
+                    std::string holdupName;
+                    if (d.contains("holdup")) {
+                        holdupName = d["holdup"].cast<std::string>();
                     }
-                    this->SetUnitHoldup(unitName, holdupName, holdupData);
+                    else {
+                        auto hs = this->GetUnitHoldups(unit);
+                        if (hs.empty())
+                            throw std::runtime_error("No holdups defined for unit: " + unit);
+                        holdupName = hs.front();
+                    }
+
+                    py::dict data;
+                    for (auto kv : d) {
+                        std::string key = kv.first.cast<std::string>();
+                        if (key != "unit" && key != "holdup")
+                            data[key.c_str()] = kv.second;
+                    }
+
+                    try {
+                        this->SetUnitHoldup(unit, holdupName, data);
+                    }
+                    catch (const std::exception& e) {
+                        std::cerr << "[PyDyssol] Warning: failed to set holdup for unit '"
+                            << unit << "': " << e.what() << "\n";
+                    }
                 }
             }
 
@@ -678,29 +713,35 @@ void PyDyssol::SetGrids(const std::vector<std::map<std::string, py::object>>& gr
     auto& gridMgr = const_cast<CMultidimensionalGrid&>(m_flowsheet.GetGrid());
     std::vector<std::string> errors;
 
-    // Validate grids
+    // 1) Validate all requested grid types
     for (const auto& grid : grids) {
+        std::string typeStr = py::cast<std::string>(grid.at("type"));
         if (!IsGridValid(grid)) {
-            std::string typeStr = py::cast<std::string>(grid.at("type"));
             errors.push_back("Invalid grid type: '" + typeStr + "'. Valid types: " + GetAllowedDistrNames());
         }
     }
     if (!errors.empty()) {
         std::string errorMsg = "Failed to set grids:\n";
-        for (const auto& err : errors) {
+        for (const auto& err : errors)
             errorMsg += "  - " + err + "\n";
-        }
         throw std::runtime_error(errorMsg);
     }
-    // Clear existing grids
-    gridMgr.Clear();
 
-    // Add new grids
+    // 2) Remove only the existing dimensions _other_ than compounds
+    std::vector<EDistrTypes> toRemove;
+    for (const auto* dim : gridMgr.GetGridDimensions()) {
+        if (dim->DimensionType() != EDistrTypes::DISTR_COMPOUNDS)
+            toRemove.push_back(dim->DimensionType());
+    }
+    for (auto t : toRemove)
+        gridMgr.RemoveDimension(t);
+
+    // 3) Add each user-specified grid
     for (const auto& grid : grids) {
         AddGrid(grid);
     }
 
-    // Update grids in flowsheet
+    // 4) Rebuild internal structures
     m_flowsheet.UpdateGrids();
 }
 
@@ -757,7 +798,7 @@ py::dict PyDyssol::GetModelInfo(const std::string& unitName) const {
     result["ports"] = ports;
 
     // Parameters
-    result["parameters"] = py::cast(GetUnitParametersAll(unitName));
+    result["parameters"] = GetUnitParametersAll(unitName);
 
     // Holdups
     result["holdups"] = py::cast(GetUnitHoldups(unitName));

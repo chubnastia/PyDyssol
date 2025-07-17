@@ -24,19 +24,21 @@ private:
     CSimulator m_simulator;                 // Simulator
     std::string m_defaultMaterialsPath;     // Default path for materials database
     std::string m_defaultModelsPath;        // Default path for model units
-    bool m_isInitialized;                   // Flag to track initialization state
     bool m_isDatabaseLoaded;                // Flag to track database load state
     bool m_isModelsLoaded;                  // Flag to track model path load state
+	bool m_debug{ false };                  // Flag for debug mode
 	bool PyDyssol::ValidateFlowsheetState() const; // Validate the current state of the flowsheet
     bool PyDyssol::SetCompoundsFallback(const std::vector<std::string>& _compoundKeys);
 
 public:
     PyDyssol(const std::string& materialsPath = "D:/Dyssol/Materials.dmdb",
-        const std::string& modelsPath = "C:/Program Files/Dyssol/Units");
+        const std::string& modelsPath = "C:/Program Files/Dyssol/Units",
+        bool debug = false);
 
     bool LoadMaterialsDatabase(const std::string& path);
     bool AddModelPath(const std::string& path);
     bool OpenFlowsheet(const std::string& filePath);
+    void PyDyssol::CloseFlowsheet();
     bool SaveFlowsheet(const std::string& filePath);
     void Simulate(double endTime = -1.0); // Default: -1 means no override
     std::string Initialize();
@@ -58,7 +60,7 @@ public:
 
     //Compounds
     std::vector<std::pair<std::string, std::string>> GetDatabaseCompounds() const;
-    std::vector<std::pair<std::string, std::string>> GetCompounds() const;
+    std::vector<std::string> PyDyssol::GetCompounds() const;
 
     bool SetCompounds(const std::vector<std::string>& compoundNames);
 
@@ -76,8 +78,11 @@ public:
 
     // Get all parameters (real and combo) as string pairs
     pybind11::object GetUnitParameter(const std::string& unitName, const std::string& paramName) const;
-    std::map<std::string, std::tuple<pybind11::object, std::string, std::string>> GetUnitParameters(const std::string& unitName) const;
-    std::map<std::string, std::tuple<pybind11::object, std::string, std::string>> GetUnitParametersAll(const std::string& unitName) const;
+    pybind11::list PyDyssol::GetUnitParameters(const std::string& unitName) const;
+    pybind11::list PyDyssol::GetUnitParameters() const;
+    pybind11::list PyDyssol::GetUnitParametersAll(const std::string& unitName) const;
+    std::map<std::string, std::tuple<pybind11::object, std::string, std::string>> PyDyssol::GetUnitParametersInfo(const std::string& unitName) const;
+    std::map<std::string, std::tuple<pybind11::object, std::string, std::string>> PyDyssol::GetUnitParametersAllInfo(const std::string& unitName) const;
 
     void SetUnitParameter(const std::string& unitName, const std::string& paramName, const std::variant< bool, double, std::string,
         int64_t, uint64_t, std::vector<double>, std::vector<int64_t>, std::vector<uint64_t>, std::vector<std::pair<double, double>>,
@@ -95,25 +100,27 @@ public:
     std::map<std::string, double> GetUnitHoldupOverall(const std::string& unitName, const std::string& holdupName, double time) const;
     std::map<std::string, double> GetUnitHoldupComposition(const std::string& unitName, const std::string& holdupName, double time) const;
     pybind11::dict GetUnitHoldupDistribution(const std::string& unitName, const std::string& holdupName, double time) const;
-    pybind11::dict GetUnitHoldup(const std::string& unitName, const std::string& holdupName, double time) const;
+    pybind11::list PyDyssol::GetUnitHoldup(const std::string& unitName, const std::string& holdupName, double time);
     //Without holdupName
     std::map<std::string, double> GetUnitHoldupOverall(const std::string& unitName, double time) const;
     std::map<std::string, double> GetUnitHoldupComposition(const std::string& unitName, double time) const;
     pybind11::dict PyDyssol::GetUnitHoldupDistribution(const std::string& unitName, double time) const;
-    pybind11::dict GetUnitHoldup(const std::string& unitName, double time) const;
+    pybind11::list PyDyssol::GetUnitHoldup(const std::string& unitName, double time);
 	// Without timepoints, named holdups
     pybind11::dict GetUnitHoldupOverall(const std::string& unitName, const std::string& holdupName);
     pybind11::dict GetUnitHoldupComposition(const std::string& unitName, const std::string& holdupName);
     pybind11::dict GetUnitHoldupDistribution(const std::string& unitName, const std::string& holdupName);
-    pybind11::dict GetUnitHoldup(const std::string& unitName, const std::string& holdupName);
+    pybind11::list PyDyssol::GetUnitHoldup(const std::string& unitName, const std::string& holdupName);
     //Without timepoints
     pybind11::dict GetUnitHoldupOverall(const std::string& unitName);
     pybind11::dict GetUnitHoldupComposition(const std::string& unitName);
     pybind11::dict GetUnitHoldupDistribution(const std::string& unitName);
-    pybind11::dict GetUnitHoldup(const std::string& unitName);
+    pybind11::list PyDyssol::GetUnitHoldup(const std::string& unitName);
+    pybind11::list PyDyssol::GetUnitHoldup();
     //Sets
     void SetUnitHoldup(const std::string& unitName, const pybind11::dict& data);
     void SetUnitHoldup(const std::string& unitName, const std::string& holdupName, const pybind11::dict& data);
+    void SetUnitHoldup(const pybind11::dict& holdupDict);
 
 
     // Feeds
@@ -122,27 +129,28 @@ public:
     std::map<std::string, double> GetUnitFeedOverall(const std::string& unitName, const std::string& feedName, double time) const;
     std::map<std::string, double> GetUnitFeedComposition(const std::string& unitName, const std::string& feedName, double time) const;
     pybind11::dict GetUnitFeedDistribution(const std::string& unitName, const std::string& feedName, double time) const;
-    pybind11::dict GetUnitFeed(const std::string& unitName, const std::string& feedName, double time) const;
+    pybind11::list GetUnitFeed(const std::string& unitName, const std::string& feedName, double time) const;
     // Overloads without feedName, default to first feed
     std::map<std::string, double> GetUnitFeedOverall(const std::string& unitName, double time) const;
     std::map<std::string, double> GetUnitFeedComposition(const std::string& unitName, double time) const;
     pybind11::dict GetUnitFeedDistribution(const std::string& unitName, double time) const;
-    pybind11::dict GetUnitFeed(const std::string& unitName, double time) const;
+    pybind11::list GetUnitFeed(const std::string& unitName, double time) const;
     //Without timepoints
     pybind11::dict GetUnitFeedOverall(const std::string& unitName, const std::string& feedName);
     pybind11::dict GetUnitFeedComposition(const std::string& unitName, const std::string& feedName);
     pybind11::dict GetUnitFeedDistribution(const std::string& unitName, const std::string& feedName);
-    pybind11::dict GetUnitFeed(const std::string& unitName, const std::string& feedName);
+    pybind11::list GetUnitFeed(const std::string& unitName, const std::string& feedName);
 	//Without timepoints, only first feed
     pybind11::dict GetUnitFeedOverall(const std::string& unitName);
     pybind11::dict GetUnitFeedComposition(const std::string& unitName);
     pybind11::dict GetUnitFeedDistribution(const std::string& unitName);
-    pybind11::dict GetUnitFeed(const std::string& unitName);
+    pybind11::list GetUnitFeed(const std::string& unitName);
     //Sets
     void SetUnitFeed(const std::string& unitName, const std::string& feedName, double time, const pybind11::dict& data);
     void SetUnitFeed(const std::string& unitName, const pybind11::dict& data);
     void SetUnitFeed(const std::string& unitName, double time, const pybind11::dict& data);
     void SetUnitFeed(const std::string& unitName, const std::string& feedName, const pybind11::dict& data);
+    void SetUnitFeed(const pybind11::dict& feedDict);
 
     //Unit Streams
     std::vector<std::string> GetUnitStreams(const std::string& unitName) const;

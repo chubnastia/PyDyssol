@@ -15,16 +15,15 @@ std::vector<std::pair<std::string, std::string>> PyDyssol::GetDatabaseCompounds(
     return out;
 }
 
-std::vector<std::pair<std::string, std::string>> PyDyssol::GetCompounds() const
+std::vector<std::string> PyDyssol::GetCompounds() const
 {
-    std::vector<std::pair<std::string, std::string>> result;
+    std::vector<std::string> result;
     for (const auto& key : m_flowsheet.GetCompounds())
     {
-        const auto* compound = m_materialsDatabase.GetCompound(key);
-        if (compound)
-            result.emplace_back(compound->GetName(), compound->GetKey());
+        if (const auto* cmp = m_materialsDatabase.GetCompound(key))
+            result.push_back(cmp->GetName());
         else
-            result.emplace_back(key, "[unknown]");
+            result.push_back(key);
     }
     return result;
 }

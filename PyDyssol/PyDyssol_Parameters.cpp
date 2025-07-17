@@ -132,7 +132,7 @@ std::string GetParameterTypeString(EUnitParameter type) {
     }
 }
 
-std::map<std::string, std::tuple<pybind11::object, std::string, std::string>> PyDyssol::GetUnitParameters(const std::string& unitName) const
+std::map<std::string, std::tuple<pybind11::object, std::string, std::string>> PyDyssol::GetUnitParametersInfo(const std::string& unitName) const
 {
     const auto* unit = m_flowsheet.GetUnitByName(unitName);
     if (!unit)
@@ -161,7 +161,7 @@ std::map<std::string, std::tuple<pybind11::object, std::string, std::string>> Py
     return result;
 }
 
-std::map<std::string, std::tuple<pybind11::object, std::string, std::string>> PyDyssol::GetUnitParametersAll(const std::string& unitName) const
+std::map<std::string, std::tuple<pybind11::object, std::string, std::string>> PyDyssol::GetUnitParametersAllInfo(const std::string& unitName) const
 {
     const auto* unit = m_flowsheet.GetUnitByName(unitName);
     if (!unit)
@@ -188,6 +188,78 @@ std::map<std::string, std::tuple<pybind11::object, std::string, std::string>> Py
         // Store the tuple (value, type, units)
         result[name] = std::make_tuple(value, typeStr, unitsStr);
     }
+    return result;
+}
+
+pybind11::list PyDyssol::GetUnitParameters(const std::string& unitName) const
+{
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit)
+        throw std::runtime_error("Unit not found: " + unitName);
+
+    const auto* model = unit->GetModel();
+    if (!model)
+        throw std::runtime_error("Model not found for unit: " + unitName);
+
+    const auto& mgr = model->GetUnitParametersManager();
+    auto activeParams = mgr.GetActiveParameters();
+
+    pybind11::dict entry;
+    entry["unit"] = unitName;
+    pybind11::dict paramsDict;
+    for (const auto* param : activeParams) {
+        const std::string name = param->GetName();
+        pybind11::object value = GetNativeUnitParameter(param, m_materialsDatabase);
+        paramsDict[name.c_str()] = value;
+    }
+    entry["parameters"] = paramsDict;
+
+    pybind11::list result;
+    result.append(entry);
+    return result;
+}
+
+pybind11::list PyDyssol::GetUnitParameters() const
+{
+   pybind11::list result;
+   for (const auto* unit : m_flowsheet.GetAllUnits())
+   {
+        auto one = GetUnitParameters(unit->GetName());
+        pybind11::dict entry = one[0].cast<pybind11::dict>();
+        pybind11::dict params = entry["parameters"].cast<pybind11::dict>();
+        if (params.size() == 0)
+           continue;  // skip units without any parameters
+        result.append(entry);
+   }
+   return result;
+}
+
+pybind11::list PyDyssol::GetUnitParametersAll(const std::string& unitName) const
+{
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit)
+        throw std::runtime_error("Unit not found: " + unitName);
+
+    const auto* model = unit->GetModel();
+    if (!model)
+        throw std::runtime_error("Model not found for unit: " + unitName);
+
+    const auto& mgr = model->GetUnitParametersManager();
+    auto allParams = mgr.GetParameters();
+
+    pybind11::dict entry;
+    entry["unit"] = unitName;
+
+    pybind11::dict paramsDict;
+    for (const auto* param : allParams) {
+        const std::string name = param->GetName();
+        pybind11::object value = GetNativeUnitParameter(param, m_materialsDatabase);
+        paramsDict[name.c_str()] = value;
+    }
+    entry["parameters"] = paramsDict;
+
+    pybind11::list result;
+    result.append(entry);
     return result;
 }
 

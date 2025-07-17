@@ -22,226 +22,7 @@ std::vector<std::string> PyDyssol::GetUnitFeeds(const std::string& unitName) con
     return result;
 }
 
-std::map<std::string, double> PyDyssol::GetUnitFeedOverall(const std::string& unitName, const std::string& feedName, double time) const {
-    std::map<std::string, double> overall;
-    const CStream* feed = m_flowsheet.GetUnitByName(unitName)->GetModel()->GetStreamsManager().GetFeed(feedName);
-    if (!feed) throw std::runtime_error("Feed not found: " + feedName + " in unit " + unitName);
-
-    overall["massflow"] = feed->GetMass(time);
-    overall["temperature"] = feed->GetTemperature(time);
-    overall["pressure"] = feed->GetPressure(time);
-    return overall;
-}
-
-std::map<std::string, double> PyDyssol::GetUnitFeedComposition(const std::string& unitName, const std::string& feedName, double time) const {
-    std::map<std::string, double> composition;
-    const CStream* feed = m_flowsheet.GetUnitByName(unitName)->GetModel()->GetStreamsManager().GetFeed(feedName);
-    if (!feed) throw std::runtime_error("Feed not found: " + feedName + " in unit " + unitName);
-
-    for (const auto& compoundKey : m_flowsheet.GetCompounds()) {
-        const CCompound* compound = m_materialsDatabase.GetCompound(compoundKey);
-        std::string compoundName = compound ? compound->GetName() : compoundKey;
-
-        for (const auto& phase : m_flowsheet.GetPhases()) {
-            double mass = feed->GetCompoundMass(time, compoundKey, phase.state);
-            if (std::abs(mass) > 1e-12) {
-                std::string label = compoundName + " [" + PhaseToString(phase.state) + "]";
-                composition[label] = mass;
-            }
-        }
-    }
-
-    return composition;
-}
-
-pybind11::dict PyDyssol::GetUnitFeedDistribution(const std::string& unitName, const std::string& feedName, double time) const {
-    pybind11::dict result;
-    const CStream* feed = m_flowsheet.GetUnitByName(unitName)->GetModel()->GetStreamsManager().GetFeed(feedName);
-    if (!feed) throw std::runtime_error("Feed not found: " + feedName + " in unit " + unitName);
-
-    const auto& gridDims = m_flowsheet.GetGrid().GetGridDimensions();
-    for (const CGridDimension* dim : gridDims) {
-        EDistrTypes type = dim->DimensionType();
-        if (type == EDistrTypes::DISTR_COMPOUNDS) continue;
-        int idx = GetDistributionTypeIndex(type);
-        if (idx < 0) continue;
-        std::vector<double> dist = feed->GetDistribution(time, type);
-        if (!dist.empty())
-            result[DISTR_NAMES[idx]] = pybind11::cast(dist);
-    }
-
-    return result;
-}
-
-pybind11::dict PyDyssol::GetUnitFeed(const std::string& unitName, const std::string& feedName, double time) const {
-    pybind11::dict result;
-    result["overall"] = GetUnitFeedOverall(unitName, feedName, time);
-    result["composition"] = GetUnitFeedComposition(unitName, feedName, time);
-    result["distributions"] = GetUnitFeedDistribution(unitName, feedName, time);
-    return result;
-}
-
-//Feeds without feed_name
-std::map<std::string, double> PyDyssol::GetUnitFeedOverall(const std::string& unitName, double time) const {
-    auto feeds = GetUnitFeeds(unitName);
-    if (feeds.empty())
-        throw std::runtime_error("No feeds found in unit: " + unitName);
-    return GetUnitFeedOverall(unitName, feeds.front(), time);
-}
-
-std::map<std::string, double> PyDyssol::GetUnitFeedComposition(const std::string& unitName, double time) const {
-    auto feeds = GetUnitFeeds(unitName);
-    if (feeds.empty())
-        throw std::runtime_error("No feeds found in unit: " + unitName);
-    return GetUnitFeedComposition(unitName, feeds.front(), time);
-}
-
-pybind11::dict PyDyssol::GetUnitFeedDistribution(const std::string& unitName, double time) const {
-    auto feeds = GetUnitFeeds(unitName);
-    if (feeds.empty())
-        throw std::runtime_error("No feeds found in unit: " + unitName);
-    return GetUnitFeedDistribution(unitName, feeds.front(), time);
-}
-
-pybind11::dict PyDyssol::GetUnitFeed(const std::string& unitName, double time) const {
-    auto feeds = GetUnitFeeds(unitName);
-    if (feeds.empty())
-        throw std::runtime_error("No feeds found in unit: " + unitName);
-    return GetUnitFeed(unitName, feeds.front(), time);
-}
-
-//Feeds without timepoints
-pybind11::dict PyDyssol::GetUnitFeedOverall(const std::string& unitName, const std::string& feedName) {
-    pybind11::dict overall;
-    const auto* unit = m_flowsheet.GetUnitByName(unitName);
-    if (!unit)
-        throw std::runtime_error("Unit not found: " + unitName);
-    const auto* feed = unit->GetModel()->GetStreamsManager().GetFeed(feedName);
-    if (!feed)
-        throw std::runtime_error("Feed not found: " + feedName);
-
-    std::vector<double> timepoints = feed->GetAllTimePoints();
-    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
-    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
-        timepoints.push_back(t_end);
-
-    std::vector<double> timeList;
-    std::map<std::string, std::vector<double>> overallData;
-    for (double t : timepoints) {
-        timeList.push_back(t);
-        overallData["massflow"].push_back(feed->GetMass(t));
-        overallData["temperature"].push_back(feed->GetTemperature(t));
-        overallData["pressure"].push_back(feed->GetPressure(t));
-    }
-
-    overall["timepoints"] = timeList;
-    for (const auto& [key, vec] : overallData)
-        overall[key.c_str()] = vec;
-
-    return overall;
-}
-
-pybind11::dict PyDyssol::GetUnitFeedComposition(const std::string& unitName, const std::string& feedName) {
-    pybind11::dict composition;
-    const auto* unit = m_flowsheet.GetUnitByName(unitName);
-    if (!unit)
-        throw std::runtime_error("Unit not found: " + unitName);
-    const auto* feed = unit->GetModel()->GetStreamsManager().GetFeed(feedName);
-    if (!feed)
-        throw std::runtime_error("Feed not found: " + feedName);
-
-    std::vector<double> timepoints = feed->GetAllTimePoints();
-    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
-    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
-        timepoints.push_back(t_end);
-
-    std::vector<double> timeList;
-    std::map<std::string, std::vector<double>> compositionData;
-    std::set<std::string> allCompounds;
-
-    for (double t : timepoints) {
-        timeList.push_back(t);
-        for (const auto& compoundKey : m_flowsheet.GetCompounds()) {
-            const auto* compound = m_materialsDatabase.GetCompound(compoundKey);
-            std::string name = compound ? compound->GetName() : compoundKey;
-
-            for (const auto& phase : m_flowsheet.GetPhases()) {
-                double val = feed->GetCompoundMass(t, compoundKey, phase.state);
-                std::string label = name + " [" + PhaseToString(phase.state) + "]";
-                compositionData[label].push_back(val);
-                allCompounds.insert(label);
-            }
-        }
-    }
-
-    composition["timepoints"] = timeList;
-    for (const auto& name : allCompounds) {
-        const auto& values = compositionData[name];
-        bool allZero = std::all_of(values.begin(), values.end(), [](double v) { return std::abs(v) < 1e-15; });
-        if (!allZero) composition[name.c_str()] = values;
-    }
-
-    return composition;
-}
-
-pybind11::dict PyDyssol::GetUnitFeedDistribution(const std::string& unitName, const std::string& feedName) {
-    pybind11::dict distributions;
-    const auto* unit = m_flowsheet.GetUnitByName(unitName);
-    if (!unit)
-        throw std::runtime_error("Unit not found: " + unitName);
-    const auto* feed = unit->GetModel()->GetStreamsManager().GetFeed(feedName);
-    if (!feed)
-        throw std::runtime_error("Feed not found: " + feedName);
-
-    std::vector<double> timepoints = feed->GetAllTimePoints();
-    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
-    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
-        timepoints.push_back(t_end);
-
-    std::vector<double> timeList;
-    std::set<std::string> allDistributions;
-    std::map<std::string, std::vector<std::vector<double>>> distributionData;
-
-    for (double t : timepoints) {
-        timeList.push_back(t);
-        pybind11::dict dists = GetUnitFeedDistribution(unitName, feedName, t);
-        for (auto item : dists) {
-            std::string distName = item.first.cast<std::string>();
-            std::vector<double> distValues = item.second.cast<std::vector<double>>();
-            distributionData[distName].push_back(distValues);
-            allDistributions.insert(distName);
-        }
-    }
-
-    distributions["timepoints"] = timeList;
-
-    for (const auto& distName : allDistributions) {
-        const auto& vecOfVecs = distributionData[distName];
-
-        bool allZero = true;
-        for (const auto& vec : vecOfVecs)
-            if (std::any_of(vec.begin(), vec.end(), [](double v) { return std::abs(v) > 1e-15; })) {
-                allZero = false;
-                break;
-            }
-
-        if (!allZero)
-            distributions[distName.c_str()] = vecOfVecs;
-    }
-
-    return distributions;
-}
-
-pybind11::dict PyDyssol::GetUnitFeed(const std::string& unitName, const std::string& feedName) {
-    pybind11::dict result;
-    result["overall"] = GetUnitFeedOverall(unitName, feedName);
-    result["composition"] = GetUnitFeedComposition(unitName, feedName);
-    result["distributions"] = GetUnitFeedDistribution(unitName, feedName);
-    return result;
-}
-
-
-//Feeds without timepoints, no feed_name
+//Overalls
 pybind11::dict PyDyssol::GetUnitFeedOverall(const std::string& unitName) {
     pybind11::dict overall;
     auto feeds = GetUnitFeeds(unitName);
@@ -279,6 +60,55 @@ pybind11::dict PyDyssol::GetUnitFeedOverall(const std::string& unitName) {
     return overall;
 }
 
+std::map<std::string, double> PyDyssol::GetUnitFeedOverall(const std::string& unitName, double time) const {
+    auto feeds = GetUnitFeeds(unitName);
+    if (feeds.empty())
+        throw std::runtime_error("No feeds found in unit: " + unitName);
+    return GetUnitFeedOverall(unitName, feeds.front(), time);
+}
+
+std::map<std::string, double> PyDyssol::GetUnitFeedOverall(const std::string& unitName, const std::string& feedName, double time) const {
+    std::map<std::string, double> overall;
+    const CStream* feed = m_flowsheet.GetUnitByName(unitName)->GetModel()->GetStreamsManager().GetFeed(feedName);
+    if (!feed) throw std::runtime_error("Feed not found: " + feedName + " in unit " + unitName);
+
+    overall["massflow"] = feed->GetMass(time);
+    overall["temperature"] = feed->GetTemperature(time);
+    overall["pressure"] = feed->GetPressure(time);
+    return overall;
+}
+
+pybind11::dict PyDyssol::GetUnitFeedOverall(const std::string& unitName, const std::string& feedName) {
+    pybind11::dict overall;
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit)
+        throw std::runtime_error("Unit not found: " + unitName);
+    const auto* feed = unit->GetModel()->GetStreamsManager().GetFeed(feedName);
+    if (!feed)
+        throw std::runtime_error("Feed not found: " + feedName);
+
+    std::vector<double> timepoints = feed->GetAllTimePoints();
+    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
+    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+        timepoints.push_back(t_end);
+
+    std::vector<double> timeList;
+    std::map<std::string, std::vector<double>> overallData;
+    for (double t : timepoints) {
+        timeList.push_back(t);
+        overallData["massflow"].push_back(feed->GetMass(t));
+        overallData["temperature"].push_back(feed->GetTemperature(t));
+        overallData["pressure"].push_back(feed->GetPressure(t));
+    }
+
+    overall["timepoints"] = timeList;
+    for (const auto& [key, vec] : overallData)
+        overall[key.c_str()] = vec;
+
+    return overall;
+}
+
+//Compositions
 pybind11::dict PyDyssol::GetUnitFeedComposition(const std::string& unitName) {
     pybind11::dict composition;
     auto feeds = GetUnitFeeds(unitName);
@@ -329,6 +159,78 @@ pybind11::dict PyDyssol::GetUnitFeedComposition(const std::string& unitName) {
     return composition;
 }
 
+std::map<std::string, double> PyDyssol::GetUnitFeedComposition(const std::string& unitName, double time) const {
+    auto feeds = GetUnitFeeds(unitName);
+    if (feeds.empty())
+        throw std::runtime_error("No feeds found in unit: " + unitName);
+    return GetUnitFeedComposition(unitName, feeds.front(), time);
+}
+
+pybind11::dict PyDyssol::GetUnitFeedComposition(const std::string& unitName, const std::string& feedName) {
+    pybind11::dict composition;
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit)
+        throw std::runtime_error("Unit not found: " + unitName);
+    const auto* feed = unit->GetModel()->GetStreamsManager().GetFeed(feedName);
+    if (!feed)
+        throw std::runtime_error("Feed not found: " + feedName);
+
+    std::vector<double> timepoints = feed->GetAllTimePoints();
+    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
+    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+        timepoints.push_back(t_end);
+
+    std::vector<double> timeList;
+    std::map<std::string, std::vector<double>> compositionData;
+    std::set<std::string> allCompounds;
+
+    for (double t : timepoints) {
+        timeList.push_back(t);
+        for (const auto& compoundKey : m_flowsheet.GetCompounds()) {
+            const auto* compound = m_materialsDatabase.GetCompound(compoundKey);
+            std::string name = compound ? compound->GetName() : compoundKey;
+
+            for (const auto& phase : m_flowsheet.GetPhases()) {
+                double val = feed->GetCompoundMass(t, compoundKey, phase.state);
+                std::string label = name + " [" + PhaseToString(phase.state) + "]";
+                compositionData[label].push_back(val);
+                allCompounds.insert(label);
+            }
+        }
+    }
+
+    composition["timepoints"] = timeList;
+    for (const auto& name : allCompounds) {
+        const auto& values = compositionData[name];
+        bool allZero = std::all_of(values.begin(), values.end(), [](double v) { return std::abs(v) < 1e-15; });
+        if (!allZero) composition[name.c_str()] = values;
+    }
+
+    return composition;
+}
+
+std::map<std::string, double> PyDyssol::GetUnitFeedComposition(const std::string& unitName, const std::string& feedName, double time) const {
+    std::map<std::string, double> composition;
+    const CStream* feed = m_flowsheet.GetUnitByName(unitName)->GetModel()->GetStreamsManager().GetFeed(feedName);
+    if (!feed) throw std::runtime_error("Feed not found: " + feedName + " in unit " + unitName);
+
+    for (const auto& compoundKey : m_flowsheet.GetCompounds()) {
+        const CCompound* compound = m_materialsDatabase.GetCompound(compoundKey);
+        std::string compoundName = compound ? compound->GetName() : compoundKey;
+
+        for (const auto& phase : m_flowsheet.GetPhases()) {
+            double mass = feed->GetCompoundMass(time, compoundKey, phase.state);
+            if (std::abs(mass) > 1e-12) {
+                std::string label = compoundName + " [" + PhaseToString(phase.state) + "]";
+                composition[label] = mass;
+            }
+        }
+    }
+
+    return composition;
+}
+
+//Distributions
 pybind11::dict PyDyssol::GetUnitFeedDistribution(const std::string& unitName) {
     pybind11::dict distributions;
     auto feeds = GetUnitFeeds(unitName);
@@ -364,10 +266,8 @@ pybind11::dict PyDyssol::GetUnitFeedDistribution(const std::string& unitName) {
     }
 
     distributions["timepoints"] = timeList;
-
     for (const auto& distName : allDistributions) {
         const auto& vecOfVecs = distributionData[distName];
-
         bool allZero = true;
         for (const auto& vec : vecOfVecs) {
             for (double v : vec) {
@@ -378,7 +278,6 @@ pybind11::dict PyDyssol::GetUnitFeedDistribution(const std::string& unitName) {
             }
             if (!allZero) break;
         }
-
         if (!allZero) {
             distributions[distName.c_str()] = vecOfVecs;
         }
@@ -387,12 +286,125 @@ pybind11::dict PyDyssol::GetUnitFeedDistribution(const std::string& unitName) {
     return distributions;
 }
 
-// Re-implement the original no-timepoint GetUnitFeed to call the three above
-pybind11::dict PyDyssol::GetUnitFeed(const std::string& unitName) {
+pybind11::dict PyDyssol::GetUnitFeedDistribution(const std::string& unitName, double time) const {
+    auto feeds = GetUnitFeeds(unitName);
+    if (feeds.empty())
+        throw std::runtime_error("No feeds found in unit: " + unitName);
+    return GetUnitFeedDistribution(unitName, feeds.front(), time);
+}
+
+pybind11::dict PyDyssol::GetUnitFeedDistribution(const std::string& unitName, const std::string& feedName) {
+    pybind11::dict distributions;
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit)
+        throw std::runtime_error("Unit not found: " + unitName);
+    const auto* feed = unit->GetModel()->GetStreamsManager().GetFeed(feedName);
+    if (!feed)
+        throw std::runtime_error("Feed not found: " + feedName);
+
+    std::vector<double> timepoints = feed->GetAllTimePoints();
+    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
+    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+        timepoints.push_back(t_end);
+
+    std::vector<double> timeList;
+    std::set<std::string> allDistributions;
+    std::map<std::string, std::vector<std::vector<double>>> distributionData;
+
+    for (double t : timepoints) {
+        timeList.push_back(t);
+        pybind11::dict dists = GetUnitFeedDistribution(unitName, feedName, t);
+        for (auto item : dists) {
+            std::string distName = item.first.cast<std::string>();
+            std::vector<double> distValues = item.second.cast<std::vector<double>>();
+            distributionData[distName].push_back(distValues);
+            allDistributions.insert(distName);
+        }
+    }
+    distributions["timepoints"] = timeList;
+    for (const auto& distName : allDistributions) {
+        const auto& vecOfVecs = distributionData[distName];
+        bool allZero = true;
+        for (const auto& vec : vecOfVecs)
+            if (std::any_of(vec.begin(), vec.end(), [](double v) { return std::abs(v) > 1e-15; })) {
+                allZero = false;
+                break;
+            }
+        if (!allZero)
+            distributions[distName.c_str()] = vecOfVecs;
+    }
+    return distributions;
+}
+
+pybind11::dict PyDyssol::GetUnitFeedDistribution(const std::string& unitName, const std::string& feedName, double time) const {
     pybind11::dict result;
-    result["overall"] = GetUnitFeedOverall(unitName);
-    result["composition"] = GetUnitFeedComposition(unitName);
-    result["distributions"] = GetUnitFeedDistribution(unitName);
+    const CStream* feed = m_flowsheet.GetUnitByName(unitName)->GetModel()->GetStreamsManager().GetFeed(feedName);
+    if (!feed) throw std::runtime_error("Feed not found: " + feedName + " in unit " + unitName);
+
+    const auto& gridDims = m_flowsheet.GetGrid().GetGridDimensions();
+    for (const CGridDimension* dim : gridDims) {
+        EDistrTypes type = dim->DimensionType();
+        if (type == EDistrTypes::DISTR_COMPOUNDS) continue;
+        int idx = GetDistributionTypeIndex(type);
+        if (idx < 0) continue;
+        std::vector<double> dist = feed->GetDistribution(time, type);
+        if (!dist.empty())
+            result[DISTR_NAMES[idx]] = pybind11::cast(dist);
+    }
+
+    return result;
+}
+
+//General Getters
+pybind11::list PyDyssol::GetUnitFeed(const std::string& unitName) {
+    pybind11::list result;
+    for (const auto& feedName : GetUnitFeeds(unitName)) {
+        pybind11::dict entry;
+        entry["unit"] = unitName;
+        entry["feed"] = feedName;
+        entry["overall"] = GetUnitFeedOverall(unitName, feedName);
+        entry["composition"] = GetUnitFeedComposition(unitName, feedName);
+        entry["distributions"] = GetUnitFeedDistribution(unitName, feedName);
+        result.append(entry);
+    }
+    return result;
+}
+
+pybind11::list PyDyssol::GetUnitFeed(const std::string& unitName, double time) const {
+    pybind11::list result;
+    for (const auto& feedName : GetUnitFeeds(unitName)) {
+        pybind11::dict entry;
+        entry["unit"] = unitName;
+        entry["feed"] = feedName;
+        entry["overall"] = GetUnitFeedOverall(unitName, feedName, time);
+        entry["composition"] = GetUnitFeedComposition(unitName, feedName, time);
+        entry["distributions"] = GetUnitFeedDistribution(unitName, feedName, time);
+        result.append(entry);
+    }
+    return result;
+}
+
+pybind11::list PyDyssol::GetUnitFeed(const std::string& unitName, const std::string& feedName) {
+    pybind11::list result;
+    pybind11::dict entry;
+    entry["unit"] = unitName;
+    entry["feed"] = feedName;
+    entry["overall"] = GetUnitFeedOverall(unitName, feedName);
+    entry["composition"] = GetUnitFeedComposition(unitName, feedName);
+    entry["distributions"] = GetUnitFeedDistribution(unitName, feedName);
+    result.append(entry);
+    return result;
+}
+
+pybind11::list PyDyssol::GetUnitFeed(const std::string& unitName, const std::string& feedName, double time) const {
+    pybind11::list result;
+    pybind11::dict entry;
+    entry["unit"] = unitName;
+    entry["feed"] = feedName;
+    entry["overall"] = GetUnitFeedOverall(unitName, feedName, time);
+    entry["composition"] = GetUnitFeedComposition(unitName, feedName, time);
+    entry["distributions"] = GetUnitFeedDistribution(unitName, feedName, time);
+    result.append(entry);
     return result;
 }
 
@@ -582,3 +594,22 @@ void PyDyssol::SetUnitFeed(const std::string& unitName, const std::string& feedN
     }
 }
 
+void PyDyssol::SetUnitFeed(const py::dict& d)
+{
+    // 1) Unit
+    const std::string unit = d["unit"].cast<std::string>();
+
+    // 2) Feed name: explicit or first one
+    std::string feedName;
+    if (d.contains("feed"))
+        feedName = d["feed"].cast<std::string>();
+    else {
+        auto feeds = GetUnitFeeds(unit);
+        if (feeds.empty())
+            throw std::runtime_error("No feeds defined for unit: " + unit);
+        feedName = feeds.front();
+    }
+
+    // 3) Dispatch to existing overloads (the 3-arg will internally slice timepoints)
+    SetUnitFeed(unit, feedName, d);
+}

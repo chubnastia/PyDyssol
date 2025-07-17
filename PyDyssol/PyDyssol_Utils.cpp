@@ -81,16 +81,18 @@ std::string FormatDouble(double value)
 
 bool PyDyssol::LoadMaterialsDatabase(const std::string& path)
 {
-    std::cout << "[PyDyssol] Loading materials database: " << path << std::endl;
     fs::path absPath = fs::absolute(path);
     if (!m_materialsDatabase.LoadFromFile(absPath)) {
         std::cerr << "[PyDyssol] Failed to load materials database." << std::endl;
         m_isDatabaseLoaded = false;
         return false;
     }
-    std::cout << "[PyDyssol] Materials database loaded. Compounds: " << m_materialsDatabase.GetCompounds().size() << std::endl;
-    for (const auto* compound : m_materialsDatabase.GetCompounds()) {
-        std::cout << "[PyDyssol] Compound: " << compound->GetName() << " (Key: " << compound->GetKey() << ")" << std::endl;
+    if (m_debug) {
+        std::cout << "[PyDyssol] Loading materials database: " << path << std::endl;
+        std::cout << "[PyDyssol] Materials database loaded. Compounds: " << m_materialsDatabase.GetCompounds().size() << std::endl;
+        for (const auto* compound : m_materialsDatabase.GetCompounds()) {
+            std::cout << "[PyDyssol] Compound: " << compound->GetName() << " (Key: " << compound->GetKey() << ")" << std::endl;
+        }
     }
     m_isDatabaseLoaded = true;
     // Update flowsheet's database reference
@@ -100,7 +102,6 @@ bool PyDyssol::LoadMaterialsDatabase(const std::string& path)
 
 bool PyDyssol::AddModelPath(const std::string& path)
 {
-    std::cout << "[PyDyssol] Adding model path: " << path << std::endl;
     fs::path absPath = fs::absolute(path);
     m_modelsManager.AddDir(absPath);
     auto models = m_modelsManager.GetAvailableUnits();
@@ -109,8 +110,11 @@ bool PyDyssol::AddModelPath(const std::string& path)
         m_isModelsLoaded = false;
         return false;
     }
-    for (const auto& model : models) {
-        std::cout << "[PyDyssol] Found model: " << model.name << " (" << model.uniqueID << ")" << std::endl;
+    if (m_debug) {
+        std::cout << "[PyDyssol] Adding model path: " << path << std::endl;
+        for (const auto& model : models) {
+            std::cout << "[PyDyssol] Found model: " << model.name << " (" << model.uniqueID << ")" << std::endl;
+        }
     }
     m_isModelsLoaded = true;
     return true;

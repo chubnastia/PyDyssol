@@ -20,6 +20,68 @@ std::vector<std::string> PyDyssol::GetUnitHoldups(const std::string& unitName) c
     return result;
 } 
 
+//Overall
+pybind11::dict PyDyssol::GetUnitHoldupOverall(const std::string& unitName) {
+    pybind11::dict overall;
+
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit) throw std::runtime_error("Unit not found: " + unitName);
+
+    const auto& holdups = unit->GetModel()->GetStreamsManager().GetHoldups();
+    if (holdups.empty()) throw std::runtime_error("No holdups found in unit: " + unitName);
+    const CHoldup* holdup = holdups.front();
+
+    std::vector<double> timepoints = holdup->GetAllTimePoints();
+    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
+    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+        timepoints.push_back(t_end);
+
+    std::vector<double> timeList;
+    std::map<std::string, std::vector<double>> overallData;
+
+    for (double t : timepoints) {
+        timeList.push_back(t);
+        overallData["mass"].push_back(holdup->GetMass(t));
+        overallData["temperature"].push_back(holdup->GetTemperature(t));
+        overallData["pressure"].push_back(holdup->GetPressure(t));
+    }
+
+    overall["timepoints"] = timeList;
+    for (const auto& [key, vec] : overallData)
+        overall[key.c_str()] = vec;
+
+    return overall;
+}
+
+pybind11::dict PyDyssol::GetUnitHoldupOverall(const std::string& unitName, const std::string& holdupName) {
+    pybind11::dict overall;
+
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit) throw std::runtime_error("Unit not found: " + unitName);
+    const CHoldup* holdup = dynamic_cast<const CHoldup*>(unit->GetModel()->GetStreamsManager().GetObjectWork(holdupName));
+    if (!holdup) throw std::runtime_error("Holdup not found: " + holdupName);
+
+    std::vector<double> timepoints = holdup->GetAllTimePoints();
+    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
+    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+        timepoints.push_back(t_end);
+
+    std::vector<double> timeList;
+    std::map<std::string, std::vector<double>> data;
+    for (double t : timepoints) {
+        timeList.push_back(t);
+        data["mass"].push_back(holdup->GetMass(t));
+        data["temperature"].push_back(holdup->GetTemperature(t));
+        data["pressure"].push_back(holdup->GetPressure(t));
+    }
+
+    overall["timepoints"] = timeList;
+    for (const auto& [key, vec] : data)
+        overall[key.c_str()] = vec;
+
+    return overall;
+}
+
 std::map<std::string, double> PyDyssol::GetUnitHoldupOverall(const std::string& unitName, double time) const {
     std::map<std::string, double> overall;
     const CUnitContainer* unit = m_flowsheet.GetUnitByName(unitName);
@@ -50,6 +112,96 @@ std::map<std::string, double> PyDyssol::GetUnitHoldupOverall(const std::string& 
         {"temperature", holdup->GetTemperature(time)},
         {"pressure",    holdup->GetPressure(time)}
     };
+}
+
+//Composition
+pybind11::dict PyDyssol::GetUnitHoldupComposition(const std::string& unitName) {
+    pybind11::dict composition;
+
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit) throw std::runtime_error("Unit not found: " + unitName);
+
+    const auto& holdups = unit->GetModel()->GetStreamsManager().GetHoldups();
+    if (holdups.empty()) throw std::runtime_error("No holdups found in unit: " + unitName);
+    const CHoldup* holdup = holdups.front();
+
+    std::vector<double> timepoints = holdup->GetAllTimePoints();
+    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
+    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+        timepoints.push_back(t_end);
+
+    std::vector<double> timeList;
+    std::map<std::string, std::vector<double>> compositionData;
+    std::set<std::string> allCompounds;
+
+    for (double t : timepoints) {
+        timeList.push_back(t);
+        for (const auto& compoundKey : m_flowsheet.GetCompounds()) {
+            const auto* compound = m_materialsDatabase.GetCompound(compoundKey);
+            std::string name = compound ? compound->GetName() : compoundKey;
+
+            for (const auto& phase : m_flowsheet.GetPhases()) {
+                double val = holdup->GetCompoundMass(t, compoundKey, phase.state);
+                std::string label = name + " [" + PhaseToString(phase.state) + "]";
+                compositionData[label].push_back(val);
+                allCompounds.insert(label);
+            }
+        }
+    }
+
+    composition["timepoints"] = timeList;
+    for (const auto& name : allCompounds) {
+        const auto& values = compositionData[name];
+        bool allZero = std::all_of(values.begin(), values.end(), [](double v) { return std::abs(v) < 1e-15; });
+        if (!allZero) {
+            composition[name.c_str()] = values;
+        }
+    }
+
+    return composition;
+}
+
+pybind11::dict PyDyssol::GetUnitHoldupComposition(const std::string& unitName, const std::string& holdupName) {
+    pybind11::dict composition;
+
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit) throw std::runtime_error("Unit not found: " + unitName);
+    const CHoldup* holdup = dynamic_cast<const CHoldup*>(unit->GetModel()->GetStreamsManager().GetObjectWork(holdupName));
+    if (!holdup) throw std::runtime_error("Holdup not found: " + holdupName);
+
+    std::vector<double> timepoints = holdup->GetAllTimePoints();
+    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
+    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+        timepoints.push_back(t_end);
+
+    std::vector<double> timeList;
+    std::map<std::string, std::vector<double>> compositionData;
+    std::set<std::string> allLabels;
+
+    for (double t : timepoints) {
+        timeList.push_back(t);
+        for (const auto& compoundKey : m_flowsheet.GetCompounds()) {
+            const auto* compound = m_materialsDatabase.GetCompound(compoundKey);
+            std::string name = compound ? compound->GetName() : compoundKey;
+
+            for (const auto& phase : m_flowsheet.GetPhases()) {
+                double mass = holdup->GetCompoundMass(t, compoundKey, phase.state);
+                std::string label = name + " [" + PhaseToString(phase.state) + "]";
+                compositionData[label].push_back(mass);
+                allLabels.insert(label);
+            }
+        }
+    }
+
+    composition["timepoints"] = timeList;
+    for (const auto& label : allLabels) {
+        const auto& values = compositionData[label];
+        bool allZero = std::all_of(values.begin(), values.end(), [](double v) { return std::abs(v) < 1e-15; });
+        if (!allZero)
+            composition[label.c_str()] = values;
+    }
+
+    return composition;
 }
 
 std::map<std::string, double> PyDyssol::GetUnitHoldupComposition(const std::string& unitName, double time) const {
@@ -101,6 +253,101 @@ std::map<std::string, double> PyDyssol::GetUnitHoldupComposition(const std::stri
     }
 
     return composition;
+}
+
+//Distribution
+pybind11::dict PyDyssol::GetUnitHoldupDistribution(const std::string& unitName) {
+    pybind11::dict distributions;
+
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit) throw std::runtime_error("Unit not found: " + unitName);
+
+    const auto& holdups = unit->GetModel()->GetStreamsManager().GetHoldups();
+    if (holdups.empty()) throw std::runtime_error("No holdups found in unit: " + unitName);
+    const CHoldup* holdup = holdups.front();
+
+    std::vector<double> timepoints = holdup->GetAllTimePoints();
+    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
+    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+        timepoints.push_back(t_end);
+
+    std::vector<double> timeList;
+    std::set<std::string> allDistributions;
+    std::map<std::string, std::vector<std::vector<double>>> distributionData;
+
+    for (double t : timepoints) {
+        timeList.push_back(t);
+        pybind11::dict dists = GetUnitHoldupDistribution(unitName, t);
+        for (auto item : dists) {
+            std::string distName = item.first.cast<std::string>();
+            std::vector<double> distValues = item.second.cast<std::vector<double>>();
+            distributionData[distName].push_back(distValues);
+            allDistributions.insert(distName);
+        }
+    }
+    distributions["timepoints"] = timeList;
+    for (const auto& distName : allDistributions) {
+        const auto& vecOfVecs = distributionData[distName];
+        bool allZero = true;
+        for (const auto& vec : vecOfVecs) {
+            for (double v : vec) {
+                if (std::abs(v) > 1e-15) {
+                    allZero = false;
+                    break;
+                }
+            }
+            if (!allZero) break;
+        }
+        if (!allZero) {
+            distributions[distName.c_str()] = vecOfVecs;
+        }
+    }
+    return distributions;
+}
+
+pybind11::dict PyDyssol::GetUnitHoldupDistribution(const std::string& unitName, const std::string& holdupName) {
+    pybind11::dict distributions;
+
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit) throw std::runtime_error("Unit not found: " + unitName);
+    const CHoldup* holdup = dynamic_cast<const CHoldup*>(unit->GetModel()->GetStreamsManager().GetObjectWork(holdupName));
+    if (!holdup) throw std::runtime_error("Holdup not found: " + holdupName);
+
+    std::vector<double> timepoints = holdup->GetAllTimePoints();
+    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
+    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+        timepoints.push_back(t_end);
+
+    std::vector<double> timeList;
+    std::map<std::string, std::vector<std::vector<double>>> data;
+    std::set<std::string> allNames;
+
+    for (double t : timepoints) {
+        timeList.push_back(t);
+        for (const CGridDimension* dim : m_flowsheet.GetGrid().GetGridDimensions()) {
+            EDistrTypes type = dim->DimensionType();
+            if (type == EDistrTypes::DISTR_COMPOUNDS) continue;
+            int idx = GetDistributionTypeIndex(type);
+            if (idx < 0) continue;
+
+            std::string name = DISTR_NAMES[idx];
+            std::vector<double> dist = holdup->GetDistribution(t, type);
+            data[name].push_back(dist);
+            allNames.insert(name);
+        }
+    }
+
+    distributions["timepoints"] = timeList;
+    for (const auto& name : allNames) {
+        const auto& vectors = data[name];
+
+        bool allZero = std::all_of(vectors.begin(), vectors.end(), [](const std::vector<double>& vec) {
+            return std::all_of(vec.begin(), vec.end(), [](double v) { return std::abs(v) < 1e-15; });
+            });
+        if (!allZero)
+            distributions[name.c_str()] = vectors;
+    }
+    return distributions;
 }
 
 pybind11::dict PyDyssol::GetUnitHoldupDistribution(const std::string& unitName, double time) const {
@@ -157,35 +404,40 @@ pybind11::dict PyDyssol::GetUnitHoldupDistribution(const std::string& unitName, 
     return result;
 }
 
+//Generic holdup retrieval methods
+pybind11::list PyDyssol::GetUnitHoldup(const std::string& unitName, double time)
+{
+    pybind11::list result;
 
-pybind11::dict PyDyssol::GetUnitHoldup(const std::string& unitName, double time) const {
-    pybind11::dict result;
-    pybind11::dict compDict;
-    pybind11::dict overallDict;
+    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    if (!unit)
+        throw std::runtime_error("Unit not found: " + unitName);
 
-    auto overall = GetUnitHoldupOverall(unitName, time);
-    auto composition = GetUnitHoldupComposition(unitName, time);
+    const auto* model = unit->GetModel();
+    if (!model)
+        throw std::runtime_error("Model not found for unit: " + unitName);
 
-    overallDict["mass"] = overall.at("mass");
-    overallDict["temperature"] = overall.at("temperature");
-    overallDict["pressure"] = overall.at("pressure");
+    const auto& holdups = model->GetStreamsManager().GetHoldups();
+    for (const auto* holdup : holdups)
+    {
+        const std::string& holdupName = holdup->GetName();
 
-    for (const auto& [key, val] : composition)
-        if (std::abs(val) > 1e-12)
-            compDict[key.c_str()] = val;
+        pybind11::dict entry;
+        entry["unit"] = unitName;
+        entry["holdup"] = holdupName;
+        entry["overall"] = GetUnitHoldupOverall(unitName, holdupName, time);
+        entry["composition"] = GetUnitHoldupComposition(unitName, holdupName, time);
+        entry["distributions"] = GetUnitHoldupDistribution(unitName, holdupName, time);
 
-    result["overall"] = overallDict;
-    result["composition"] = compDict;
-    result["distributions"] = GetUnitHoldupDistribution(unitName, time);
+        result.append(entry);
+    }
 
     return result;
 }
 
-pybind11::dict PyDyssol::GetUnitHoldup(const std::string& unitName, const std::string& holdupName, double time) const
+pybind11::list PyDyssol::GetUnitHoldup(const std::string& unitName, const std::string& holdupName, double time)
 {
-    pybind11::dict result;
-    pybind11::dict compDict;
-    pybind11::dict overallDict;
+    pybind11::list result;
 
     const CUnitContainer* unit = m_flowsheet.GetUnitByName(unitName);
     if (!unit) throw std::runtime_error("Unit not found: " + unitName);
@@ -196,314 +448,89 @@ pybind11::dict PyDyssol::GetUnitHoldup(const std::string& unitName, const std::s
     const auto* holdup = dynamic_cast<const CHoldup*>(model->GetStreamsManager().GetObjectWork(holdupName));
     if (!holdup) throw std::runtime_error("Holdup not found: " + holdupName);
 
-    // === Get overall ===
-    overallDict["mass"] = holdup->GetMass(time);
-    overallDict["temperature"] = holdup->GetTemperature(time);
-    overallDict["pressure"] = holdup->GetPressure(time);
+    pybind11::dict entry;
+    entry["unit"] = unitName;
+    entry["holdup"] = holdupName;  
+    entry["overall"] = GetUnitHoldupOverall(unitName, holdupName, time);
+    entry["composition"] = GetUnitHoldupComposition(unitName, holdupName, time);
+    entry["distributions"] = GetUnitHoldupDistribution(unitName, holdupName, time);
 
-    // === Get composition ===
-    for (const auto& compoundKey : m_flowsheet.GetCompounds()) {
-        const CCompound* compound = m_materialsDatabase.GetCompound(compoundKey);
-        std::string compoundName = compound ? compound->GetName() : compoundKey;
-
-        for (const auto& phase : m_flowsheet.GetPhases()) {
-            double mass = holdup->GetCompoundMass(time, compoundKey, phase.state);
-            if (std::abs(mass) > 1e-12) {
-                std::string label = compoundName + " [" + PhaseToString(phase.state) + "]";
-                compDict[label.c_str()] = mass;
-            }
-        }
-    }
-
-    // === Get distributions ===
-    pybind11::dict distDict;
-    const auto& gridDims = m_flowsheet.GetGrid().GetGridDimensions();
-    for (const CGridDimension* dim : gridDims) {
-        EDistrTypes type = dim->DimensionType();
-        if (type == EDistrTypes::DISTR_COMPOUNDS) continue;
-        int idx = GetDistributionTypeIndex(type);
-        if (idx >= 0) {
-            std::vector<double> dist = holdup->GetDistribution(time, type);
-            if (!dist.empty())
-                distDict[py::str(DISTR_NAMES[idx])] = py::cast(dist);
-        }
-    }
-
-    result["overall"] = overallDict;
-    result["composition"] = compDict;
-    result["distributions"] = distDict;
+    result.append(entry);
 
     return result;
 }
 
-pybind11::dict PyDyssol::GetUnitHoldupOverall(const std::string& unitName) {
-    pybind11::dict overall;
+pybind11::list PyDyssol::GetUnitHoldup(const std::string& unitName)
+{
+    pybind11::list result;
 
     const auto* unit = m_flowsheet.GetUnitByName(unitName);
-    if (!unit) throw std::runtime_error("Unit not found: " + unitName);
+    if (!unit)
+        throw std::runtime_error("Unit not found: " + unitName);
 
-    const auto& holdups = unit->GetModel()->GetStreamsManager().GetHoldups();
-    if (holdups.empty()) throw std::runtime_error("No holdups found in unit: " + unitName);
-    const CHoldup* holdup = holdups.front();
+    const auto* model = unit->GetModel();
+    if (!model)
+        throw std::runtime_error("Model not found for unit: " + unitName);
 
-    std::vector<double> timepoints = holdup->GetAllTimePoints();
-    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
-    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
-        timepoints.push_back(t_end);
+    const auto& holdups = model->GetStreamsManager().GetHoldups();
+    for (const auto* holdup : holdups)
+    {
+        const std::string& holdupName = holdup->GetName();
 
-    std::vector<double> timeList;
-    std::map<std::string, std::vector<double>> overallData;
+        pybind11::dict entry;
+        entry["unit"] = unitName;
+        entry["holdup"] = holdupName;
+        entry["overall"] = GetUnitHoldupOverall(unitName, holdupName);
+        entry["composition"] = GetUnitHoldupComposition(unitName, holdupName);
+        entry["distributions"] = GetUnitHoldupDistribution(unitName, holdupName);
 
-    for (double t : timepoints) {
-        timeList.push_back(t);
-        overallData["mass"].push_back(holdup->GetMass(t));
-        overallData["temperature"].push_back(holdup->GetTemperature(t));
-        overallData["pressure"].push_back(holdup->GetPressure(t));
+        result.append(entry);
     }
 
-    overall["timepoints"] = timeList;
-    for (const auto& [key, vec] : overallData)
-        overall[key.c_str()] = vec;
-
-    return overall;
-}
-
-pybind11::dict PyDyssol::GetUnitHoldupComposition(const std::string& unitName) {
-    pybind11::dict composition;
-
-    const auto* unit = m_flowsheet.GetUnitByName(unitName);
-    if (!unit) throw std::runtime_error("Unit not found: " + unitName);
-
-    const auto& holdups = unit->GetModel()->GetStreamsManager().GetHoldups();
-    if (holdups.empty()) throw std::runtime_error("No holdups found in unit: " + unitName);
-    const CHoldup* holdup = holdups.front();
-
-    std::vector<double> timepoints = holdup->GetAllTimePoints();
-    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
-    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
-        timepoints.push_back(t_end);
-
-    std::vector<double> timeList;
-    std::map<std::string, std::vector<double>> compositionData;
-    std::set<std::string> allCompounds;
-
-    for (double t : timepoints) {
-        timeList.push_back(t);
-        for (const auto& compoundKey : m_flowsheet.GetCompounds()) {
-            const auto* compound = m_materialsDatabase.GetCompound(compoundKey);
-            std::string name = compound ? compound->GetName() : compoundKey;
-
-            for (const auto& phase : m_flowsheet.GetPhases()) {
-                double val = holdup->GetCompoundMass(t, compoundKey, phase.state);
-                std::string label = name + " [" + PhaseToString(phase.state) + "]";
-                compositionData[label].push_back(val);
-                allCompounds.insert(label);
-            }
-        }
-    }
-
-    composition["timepoints"] = timeList;
-    for (const auto& name : allCompounds) {
-        const auto& values = compositionData[name];
-        bool allZero = std::all_of(values.begin(), values.end(), [](double v) { return std::abs(v) < 1e-15; });
-        if (!allZero) {
-            composition[name.c_str()] = values;
-        }
-    }
-
-    return composition;
-}
-
-pybind11::dict PyDyssol::GetUnitHoldupDistribution(const std::string& unitName) {
-    pybind11::dict distributions;
-
-    const auto* unit = m_flowsheet.GetUnitByName(unitName);
-    if (!unit) throw std::runtime_error("Unit not found: " + unitName);
-
-    const auto& holdups = unit->GetModel()->GetStreamsManager().GetHoldups();
-    if (holdups.empty()) throw std::runtime_error("No holdups found in unit: " + unitName);
-    const CHoldup* holdup = holdups.front();
-
-    std::vector<double> timepoints = holdup->GetAllTimePoints();
-    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
-    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
-        timepoints.push_back(t_end);
-
-    std::vector<double> timeList;
-    std::set<std::string> allDistributions;
-    std::map<std::string, std::vector<std::vector<double>>> distributionData;
-
-    for (double t : timepoints) {
-        timeList.push_back(t);
-        pybind11::dict dists = GetUnitHoldupDistribution(unitName, t);
-        for (auto item : dists) {
-            std::string distName = item.first.cast<std::string>();
-            std::vector<double> distValues = item.second.cast<std::vector<double>>();
-            distributionData[distName].push_back(distValues);
-            allDistributions.insert(distName);
-        }
-    }
-
-    distributions["timepoints"] = timeList;
-
-    for (const auto& distName : allDistributions) {
-        const auto& vecOfVecs = distributionData[distName];
-
-        bool allZero = true;
-        for (const auto& vec : vecOfVecs) {
-            for (double v : vec) {
-                if (std::abs(v) > 1e-15) {
-                    allZero = false;
-                    break;
-                }
-            }
-            if (!allZero) break;
-        }
-
-        if (!allZero) {
-            distributions[distName.c_str()] = vecOfVecs;
-        }
-    }
-
-    return distributions;
-}
-
-pybind11::dict PyDyssol::GetUnitHoldup(const std::string& unitName) {
-    pybind11::dict result;
-    result["overall"] = GetUnitHoldupOverall(unitName);
-    result["composition"] = GetUnitHoldupComposition(unitName);
-    result["distributions"] = GetUnitHoldupDistribution(unitName);
     return result;
 }
 
-pybind11::dict PyDyssol::GetUnitHoldupOverall(const std::string& unitName, const std::string& holdupName) {
-    pybind11::dict overall;
+pybind11::list PyDyssol::GetUnitHoldup(const std::string& unitName, const std::string& holdupName)
+{
+    pybind11::list result;
 
-    const auto* unit = m_flowsheet.GetUnitByName(unitName);
+    const CUnitContainer* unit = m_flowsheet.GetUnitByName(unitName);
     if (!unit) throw std::runtime_error("Unit not found: " + unitName);
-    const CHoldup* holdup = dynamic_cast<const CHoldup*>(unit->GetModel()->GetStreamsManager().GetObjectWork(holdupName));
+
+    const auto* model = unit->GetModel();
+    if (!model) throw std::runtime_error("Model not found for unit: " + unitName);
+
+    const auto* holdup = dynamic_cast<const CHoldup*>(model->GetStreamsManager().GetObjectWork(holdupName));
     if (!holdup) throw std::runtime_error("Holdup not found: " + holdupName);
 
-    std::vector<double> timepoints = holdup->GetAllTimePoints();
-    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
-    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
-        timepoints.push_back(t_end);
+    pybind11::dict entry;
+    entry["unit"] = unitName;
+    entry["holdup"] = holdupName;  
+    entry["overall"] = GetUnitHoldupOverall(unitName, holdupName);
+    entry["composition"] = GetUnitHoldupComposition(unitName, holdupName);
+    entry["distributions"] = GetUnitHoldupDistribution(unitName, holdupName);
 
-    std::vector<double> timeList;
-    std::map<std::string, std::vector<double>> data;
-    for (double t : timepoints) {
-        timeList.push_back(t);
-        data["mass"].push_back(holdup->GetMass(t));
-        data["temperature"].push_back(holdup->GetTemperature(t));
-        data["pressure"].push_back(holdup->GetPressure(t));
-    }
+    result.append(entry);
 
-    overall["timepoints"] = timeList;
-    for (const auto& [key, vec] : data)
-        overall[key.c_str()] = vec;
-
-    return overall;
-}
-
-pybind11::dict PyDyssol::GetUnitHoldupComposition(const std::string& unitName, const std::string& holdupName) {
-    pybind11::dict composition;
-
-    const auto* unit = m_flowsheet.GetUnitByName(unitName);
-    if (!unit) throw std::runtime_error("Unit not found: " + unitName);
-    const CHoldup* holdup = dynamic_cast<const CHoldup*>(unit->GetModel()->GetStreamsManager().GetObjectWork(holdupName));
-    if (!holdup) throw std::runtime_error("Holdup not found: " + holdupName);
-
-    std::vector<double> timepoints = holdup->GetAllTimePoints();
-    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
-    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
-        timepoints.push_back(t_end);
-
-    std::vector<double> timeList;
-    std::map<std::string, std::vector<double>> compositionData;
-    std::set<std::string> allLabels;
-
-    for (double t : timepoints) {
-        timeList.push_back(t);
-        for (const auto& compoundKey : m_flowsheet.GetCompounds()) {
-            const auto* compound = m_materialsDatabase.GetCompound(compoundKey);
-            std::string name = compound ? compound->GetName() : compoundKey;
-
-            for (const auto& phase : m_flowsheet.GetPhases()) {
-                double mass = holdup->GetCompoundMass(t, compoundKey, phase.state);
-                std::string label = name + " [" + PhaseToString(phase.state) + "]";
-                compositionData[label].push_back(mass);
-                allLabels.insert(label);
-            }
-        }
-    }
-
-    composition["timepoints"] = timeList;
-    for (const auto& label : allLabels) {
-        const auto& values = compositionData[label];
-        bool allZero = std::all_of(values.begin(), values.end(), [](double v) { return std::abs(v) < 1e-15; });
-        if (!allZero)
-            composition[label.c_str()] = values;
-    }
-
-    return composition;
-}
-
-pybind11::dict PyDyssol::GetUnitHoldupDistribution(const std::string& unitName, const std::string& holdupName) {
-    pybind11::dict distributions;
-
-    const auto* unit = m_flowsheet.GetUnitByName(unitName);
-    if (!unit) throw std::runtime_error("Unit not found: " + unitName);
-    const CHoldup* holdup = dynamic_cast<const CHoldup*>(unit->GetModel()->GetStreamsManager().GetObjectWork(holdupName));
-    if (!holdup) throw std::runtime_error("Holdup not found: " + holdupName);
-
-    std::vector<double> timepoints = holdup->GetAllTimePoints();
-    double t_end = m_flowsheet.GetParameters()->endSimulationTime;
-    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
-        timepoints.push_back(t_end);
-
-    std::vector<double> timeList;
-    std::map<std::string, std::vector<std::vector<double>>> data;
-    std::set<std::string> allNames;
-
-    for (double t : timepoints) {
-        timeList.push_back(t);
-        for (const CGridDimension* dim : m_flowsheet.GetGrid().GetGridDimensions()) {
-            EDistrTypes type = dim->DimensionType();
-            if (type == EDistrTypes::DISTR_COMPOUNDS) continue;
-            int idx = GetDistributionTypeIndex(type);
-            if (idx < 0) continue;
-
-            std::string name = DISTR_NAMES[idx];
-            std::vector<double> dist = holdup->GetDistribution(t, type);
-            data[name].push_back(dist);
-            allNames.insert(name);
-        }
-    }
-
-    distributions["timepoints"] = timeList;
-    for (const auto& name : allNames) {
-        const auto& vectors = data[name];
-
-        bool allZero = std::all_of(vectors.begin(), vectors.end(), [](const std::vector<double>& vec) {
-            return std::all_of(vec.begin(), vec.end(), [](double v) { return std::abs(v) < 1e-15; });
-            });
-
-        if (!allZero)
-            distributions[name.c_str()] = vectors;
-    }
-
-    return distributions;
-}
-
-pybind11::dict PyDyssol::GetUnitHoldup(const std::string& unitName, const std::string& holdupName) {
-    pybind11::dict result;
-    result["overall"] = GetUnitHoldupOverall(unitName, holdupName);
-    result["composition"] = GetUnitHoldupComposition(unitName, holdupName);
-    result["distributions"] = GetUnitHoldupDistribution(unitName, holdupName);
     return result;
 }
 
+pybind11::list PyDyssol::GetUnitHoldup()
+{
+    pybind11::list result;
+    // iterate over every unit in the flowsheet
+    for (const CUnitContainer* unit : m_flowsheet.GetAllUnits())
+    {
+        const std::string unitName = unit->GetName();
+        // reuse the single unit overload
+        pybind11::list unitList = GetUnitHoldup(unitName);
+        for (auto item : unitList)
+            result.append(item);
+    }
+    return result;
+}
 
+//Sets
 static void SetHoldupValues(CHoldup* holdup, double time, const py::dict& data, const std::vector<const CGridDimension*>& gridDims, const CMaterialsDatabase& materialsDB)
 {
     // === Set composition ===
@@ -613,4 +640,32 @@ void PyDyssol::SetUnitHoldup(const std::string& unitName, const std::string& hol
     const auto& gridDims = m_flowsheet.GetGrid().GetGridDimensions();
     SetHoldupValues(holdupWork, time, data, gridDims, m_materialsDatabase);
     SetHoldupValues(holdupInit, time, data, gridDims, m_materialsDatabase);
+}
+
+void PyDyssol::SetUnitHoldup(const py::dict& d)
+{
+    // 1) Unit
+    const std::string unit = d["unit"].cast<std::string>();
+
+    // 2) Holdup name: explicit or first one
+    std::string holdupName;
+    if (d.contains("holdup"))
+        holdupName = d["holdup"].cast<std::string>();
+    else {
+        auto hols = GetUnitHoldups(unit);
+        if (hols.empty())
+            throw std::runtime_error("No holdups defined for unit: " + unit);
+        holdupName = hols.front();
+    }
+
+    // 3) Strip out only the data fields into a fresh dict
+    py::dict data;
+    for (auto kv : d) {
+        std::string key = kv.first.cast<std::string>();
+        if (key != "unit" && key != "holdup")
+            data[key.c_str()] = kv.second;
+    }
+
+    // 4) Call the existing named-holdup overload
+    SetUnitHoldup(unit, holdupName, data);
 }

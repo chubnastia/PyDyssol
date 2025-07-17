@@ -10,13 +10,15 @@ PYBIND11_MODULE(PyDyssol, m) {
 
     // Bind PyDyssol class
     py::class_<PyDyssol>(m, "PyDyssol", "A class to manage Dyssol flowsheet simulations in Python")
-        .def(py::init<std::string, std::string>(),
+        .def(py::init<std::string, std::string, bool>(),
             py::arg("materials_path") = "D:/Dyssol/Materials.dmdb",
             py::arg("models_path") = "C:/Program Files/Dyssol/Units",
-            "Initialize a new PyDyssol instance with optional paths for materials database and model units.\n"
+            py::arg("debug") = false,
+            "Initialize PyDyssol with optional materials/models paths and a debug flag.\n"
             "Args:\n"
-            "    materials_path (str): Path to the materials database (.dmdb file). Default: 'D:/Dyssol/Materials.dmdb'.\n"
-            "    models_path (str): Path to the directory containing model units. Default: 'C:/Program Files/Dyssol/Units'.")
+            "    materials_path (str): Path to the .dmdb file\n"
+            "    models_path (str): Path to model units directory\n"
+            "    debug (bool): Enable debug output.")
         .def("load_materials_database", &PyDyssol::LoadMaterialsDatabase,
             py::arg("path"),
             "Load a materials database from a .dmdb file.\n"
@@ -38,6 +40,9 @@ PYBIND11_MODULE(PyDyssol, m) {
             "    file_path (str): Path to the .dflw file.\n"
             "Returns:\n"
             "    bool: True if successful, False otherwise.")
+        .def("close_flowsheet", &PyDyssol::CloseFlowsheet,
+            "Clear the current flowsheet and reset to default state.\n"
+            "Useful before loading a new flowsheet or starting from scratch.")
         .def("save_flowsheet", &PyDyssol::SaveFlowsheet,
             py::arg("file_path"),
             "Save the current flowsheet to a .dflw file.\n"
@@ -50,9 +55,6 @@ PYBIND11_MODULE(PyDyssol, m) {
             "Run the simulation. Optionally override end time.\n"
             "Args:\n"
             "    end_time (float, optional): End time for simulation (seconds). Default: use flowsheet settings.")
-        .def("initialize", &PyDyssol::Initialize,
-            "Initialize the flowsheet for simulation.\n"
-            "Returns:\n"            "    str: Empty string if successful, error message if failed.")
         .def("debug_flowsheet", &PyDyssol::DebugFlowsheet,
             "Print debug information about the current flowsheet, including units, streams, compounds, and phases.")
         //Flowsheet
@@ -80,7 +82,7 @@ PYBIND11_MODULE(PyDyssol, m) {
         - 'compounds' (list[str]): Names of compounds to add.
         - 'phases' (list[str]): Names of phases to define.
         - 'grids' (list[dict]): Distribution grids (e.g., Size, Compounds).
-        - 'topology' or 'units' (list[dict]): Units with models, ports, holdups, etc.
+        - 'topology' (list[dict]): Units with models, ports, holdups, etc.
         - 'feeds' (list[dict]): Feed stream definitions per unit.
         - 'holdups' (list[dict]): Global holdups to apply after unit creation.
         - 'unit parameters' (list[dict]): Unit parameters with format:
@@ -99,8 +101,7 @@ PYBIND11_MODULE(PyDyssol, m) {
         .def("add_compound", &PyDyssol::AddCompound,
             py::arg("key"),
             "Add a compound to the flowsheet by its unique key.")
-        .def("get_compounds", &PyDyssol::GetCompounds,
-            "Get list of (key, name) pairs of compounds defined in the flowsheet.")
+        .def("get_compounds", &PyDyssol::GetCompounds, "Get list of compound names")
         .def("set_compounds", &PyDyssol::SetCompounds, "Set compounds using compound names from the materials database")
 
         //Phases
@@ -130,13 +131,14 @@ PYBIND11_MODULE(PyDyssol, m) {
             "Returns:\n"
             "    The parameter value (type depends on parameter).")
 
-        .def("get_unit_parameters", &PyDyssol::GetUnitParameters,
+       .def("get_unit_parameters",
+            py::overload_cast<const std::string&>(&PyDyssol::GetUnitParameters, py::const_),
             py::arg("unit_name"),
-            "Get all active parameters of a unit (according to current model selection).\n"
-            "Args:\n"
-            "    unit_name (str): Name of the unit.\n"
-            "Returns:\n"
-            "    dict[str, (value, type, unit)]: Parameters with values, types, and units.")
+            "Get active parameters of a single unit; returns a list with one dict {unit, parameters}.")
+               // active parameters of all units (zero-arg overload)
+       .def("get_unit_parameters",
+            py::overload_cast<>(&PyDyssol::GetUnitParameters, py::const_),
+            "Get active parameters of *all* units; returns one dict per unit, each with keys 'unit' and nested 'parameters'.")
         .def("get_unit_parameters_all", &PyDyssol::GetUnitParametersAll,
             py::arg("unit_name"),
             "Get all parameters (including inactive ones) defined in the unit.\n"
@@ -144,6 +146,21 @@ PYBIND11_MODULE(PyDyssol, m) {
             "    unit_name (str): Name of the unit.\n"
             "Returns:\n"
             "    dict[str, (value, type, unit)]: All parameters regardless of model selection.")
+
+       .def("get_unit_parameters_info", &PyDyssol::GetUnitParametersInfo,
+            py::arg("unit_name"),
+            "Get info about all active parameters of a unit (according to current model selection).\n"
+            "Args:\n"
+            "    unit_name (str): Name of the unit.\n"
+            "Returns:\n"
+            "    dict[str, (value, type, unit)]: Parameters info with values, types, and units.")
+       .def("get_unit_parameters_all_info", &PyDyssol::GetUnitParametersAllInfo,
+            py::arg("unit_name"),
+            "Get info about all parameters (including inactive ones) defined in the unit.\n"
+            "Args:\n"
+            "    unit_name (str): Name of the unit.\n"
+            "Returns:\n"
+            "    dict[str, (value, type, unit)]: All parameters info regardless of model selection.")
 
         .def("set_unit_parameter", &PyDyssol::SetUnitParameter,
             py::arg("unitName"), py::arg("paramName"), py::arg("value"),
@@ -195,10 +212,9 @@ PYBIND11_MODULE(PyDyssol, m) {
             py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitHoldupDistribution, py::const_),
             py::arg("unit_name"), py::arg("time"),
             "Return solid-phase size distributions per compound in the default holdup.")
-        .def("get_unit_holdup",
-            py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitHoldup, py::const_),
+       .def("get_unit_holdup", py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitHoldup),
             py::arg("unit_name"), py::arg("time"),
-            "Get all data (overall, composition, distributions) of the default holdup at a specific time.")
+            "Get holdups for a unit at a specific time")
 
         .def("set_unit_holdup",
             py::overload_cast<const std::string&, const py::dict&>(&PyDyssol::SetUnitHoldup),
@@ -218,10 +234,12 @@ PYBIND11_MODULE(PyDyssol, m) {
             py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitHoldupDistribution, py::const_),
             py::arg("unit_name"), py::arg("holdup_name"), py::arg("time"),
             "Get size distribution of a specific named holdup at a given time.")
-        .def("get_unit_holdup",
-            py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitHoldup, py::const_),
-            py::arg("unit_name"), py::arg("holdup_name"), py::arg("time"),
-            "Get all data (overall, composition, distributions) from a specific named holdup at a given time.")
+       .def("get_unit_holdup", py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitHoldup),
+             py::arg("unit_name"), py::arg("holdup_name"), py::arg("time"),
+             "Get a specific holdup for a unit at a specific time")
+       .def("get_unit_holdup",
+             py::overload_cast<>(&PyDyssol::GetUnitHoldup),
+             "Get full time-series holdup data (overall, composition, distributions) for _all_ units and holdups.")
 
         .def("set_unit_holdup",
             py::overload_cast<const std::string&, const std::string&, const py::dict&>(&PyDyssol::SetUnitHoldup),
@@ -264,11 +282,16 @@ PYBIND11_MODULE(PyDyssol, m) {
             py::arg("unit_name"),
             "Get full time-series holdup data (overall, composition, distributions) for the default holdup.")
 
+        .def("set_unit_holdup",
+            py::overload_cast<const py::dict&>(&PyDyssol::SetUnitHoldup),
+            py::arg("holdup_dict"),
+            "Set one holdup by passing a dict with keys 'unit', optional 'holdup', plus 'overall', 'composition', 'distributions' sub-dicts.")
+        
         // Feeds
         .def("get_unit_feeds", &PyDyssol::GetUnitFeeds,
             py::arg("unit_name"),
             "Get a list of feed names defined for the given unit.")
-
+        //Feed sets
         .def("set_unit_feed",
             py::overload_cast<const std::string&, const std::string&, double, const py::dict&>(&PyDyssol::SetUnitFeed),
             py::arg("unit_name"), py::arg("feed_name"), py::arg("time"), py::arg("data"),
@@ -290,7 +313,10 @@ PYBIND11_MODULE(PyDyssol, m) {
             py::overload_cast<const std::string&, const std::string&, const py::dict&>(&PyDyssol::SetUnitFeed),
             py::arg("unit_name"), py::arg("feed_name"), py::arg("data"),
             "Set a named feed of a unit at t=0.0 with a data dictionary.")
-
+        .def("set_unit_feed",
+            py::overload_cast<const py::dict&>(&PyDyssol::SetUnitFeed),
+            py::arg("feed_dict"),
+            "Set one feed by passing a dict with keys 'unit', optional 'feed', plus 'overall', 'composition', 'distributions' sub-dicts.")
 
         .def("get_unit_feed_overall",
             py::overload_cast<const std::string&, const std::string&, double>(&PyDyssol::GetUnitFeedOverall, py::const_),
@@ -545,16 +571,40 @@ PYBIND11_MODULE(PyDyssol, m) {
                 return;
             }
 
-            // Check for tuple list
-            bool is_tuple_list = true;
+            // Check for topology (list of units with model and ports)
+            bool is_topology = true;
             for (const auto& item : data_list) {
-                if (!py::isinstance<py::tuple>(item)) {
-                    is_tuple_list = false;
+                if (!py::isinstance<py::dict>(item)) {
+                    is_topology = false;
+                    break;
+                }
+                py::dict d = item.cast<py::dict>();
+                if (!d.contains("unit") || !d.contains("model") || !d.contains("ports")) {
+                    is_topology = false;
                     break;
                 }
             }
-            if (is_tuple_list) {
-                py::print(data);
+            if (is_topology) {
+                py::print("[");
+                for (size_t i = 0; i < py::len(data_list); ++i) {
+                    py::dict d = data_list[i].cast<py::dict>();
+                    std::string unit = d["unit"].cast<std::string>();
+                    std::string model = d["model"].cast<std::string>();
+                    py::dict ports = d["ports"].cast<py::dict>();
+
+                    py::print("    {\"unit\": \"" + unit + "\", \"model\": \"" + model + "\", \"ports\": {");
+                    size_t count = 0;
+                    for (auto p : ports) {
+                        std::string port = p.first.cast<std::string>();
+                        py::dict port_dict = p.second.cast<py::dict>();
+                        std::string stream = port_dict.contains("stream") ? port_dict["stream"].cast<std::string>() : "";
+                        std::string comma = (++count < py::len(ports)) ? "," : "";
+                        py::print("        \"" + port + "\": {\"stream\": \"" + stream + "\"}" + comma);
+                    }
+                    std::string comma = (i + 1 < py::len(data_list)) ? "," : "";
+                    py::print("    }}" + comma);
+                }
+                py::print("]");
                 return;
             }
 
