@@ -15,7 +15,7 @@ PyDyssol is built on:
   - Parameter setting (scalar, combo, compound, MDB, reaction)
   - Stream inspection and manipulation
   - Flowsheet structure (units and connections)
-  - Simulation execution: `Initialize`, `RunSimulation`, `Save`, `Load`
+  - Simulation execution
 
 ---
 
@@ -26,4 +26,3 @@ PyDyssol is built on:
 - Support for complex parameter types (compound-specific values, distributions, reactions)
 - Real-time stream access for monitoring or post-processing
 - Multi-model and multi-configuration workflows
-- Seamless integration with Python tools (NumPy, pandas, matplotlib)
