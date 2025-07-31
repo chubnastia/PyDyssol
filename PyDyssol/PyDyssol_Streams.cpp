@@ -45,6 +45,8 @@ pybind11::dict PyDyssol::GetStreamDistribution(const std::string& streamName, do
 
     for (const CGridDimension* dim : m_flowsheet.GetGrid().GetGridDimensions()) {
         EDistrTypes type = dim->DimensionType();
+        if (type == EDistrTypes::DISTR_COMPOUNDS)
+            continue;
         int idx = GetDistributionTypeIndex(type);
         if (idx >= 0) {
             std::vector<double> dist = stream->GetDistribution(time, type);
@@ -57,6 +59,7 @@ pybind11::dict PyDyssol::GetStreamDistribution(const std::string& streamName, do
 
 pybind11::dict PyDyssol::GetStream(const std::string& streamName, double time) const {
     pybind11::dict result;
+    result["stream"] = streamName;
     result["overall"] = GetStreamOverall(streamName, time);
     result["composition"] = GetStreamComposition(streamName, time);
     result["distributions"] = GetStreamDistribution(streamName, time);
@@ -71,7 +74,7 @@ std::vector<std::string> PyDyssol::GetStreams() const {
 }
 
 //Without timepoints
-pybind11::dict PyDyssol::GetStreamOverall(const std::string& streamName) {
+pybind11::dict PyDyssol::GetStreamOverall(const std::string& streamName) const {
     pybind11::dict overall;
 
     const CStream* stream = m_flowsheet.GetStreamByName(streamName);
@@ -99,7 +102,7 @@ pybind11::dict PyDyssol::GetStreamOverall(const std::string& streamName) {
     return overall;
 }
 
-pybind11::dict PyDyssol::GetStreamComposition(const std::string& streamName) {
+pybind11::dict PyDyssol::GetStreamComposition(const std::string& streamName) const {
     pybind11::dict composition;
 
     const CStream* stream = m_flowsheet.GetStreamByName(streamName);
@@ -140,7 +143,7 @@ pybind11::dict PyDyssol::GetStreamComposition(const std::string& streamName) {
     return composition;
 }
 
-pybind11::dict PyDyssol::GetStreamDistribution(const std::string& streamName) {
+pybind11::dict PyDyssol::GetStreamDistribution(const std::string& streamName) const {
     pybind11::dict distributions;
 
     const CStream* stream = m_flowsheet.GetStreamByName(streamName);
@@ -160,6 +163,8 @@ pybind11::dict PyDyssol::GetStreamDistribution(const std::string& streamName) {
         pybind11::dict dists = GetStreamDistribution(streamName, t);
         for (auto item : dists) {
             std::string distName = item.first.cast<std::string>();
+            if (distName == "Compounds")
+                continue;
             std::vector<double> distValues = item.second.cast<std::vector<double>>();
             distributionData[distName].push_back(distValues);
             allDistributions.insert(distName);
@@ -190,10 +195,21 @@ pybind11::dict PyDyssol::GetStreamDistribution(const std::string& streamName) {
     return distributions;
 }
 
-pybind11::dict PyDyssol::GetStream(const std::string& streamName) {
+pybind11::dict PyDyssol::GetStream(const std::string& streamName) const {
     pybind11::dict result;
+    result["stream"] = streamName;
     result["overall"] = GetStreamOverall(streamName);
     result["composition"] = GetStreamComposition(streamName);
     result["distributions"] = GetStreamDistribution(streamName);
     return result;
 }
+
+//No argument
+pybind11::list PyDyssol::GetStream() const
+{
+    pybind11::list all;
+    for (auto* s : m_flowsheet.GetAllStreams())
+        all.append(GetStream(s->GetName()));
+    return all;
+}
+

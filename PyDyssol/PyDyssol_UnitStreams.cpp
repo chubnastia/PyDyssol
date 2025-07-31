@@ -119,7 +119,7 @@ pybind11::dict PyDyssol::GetUnitStream(const std::string& unitName, const std::s
 }
 
 //Without timepoints, with stream_name
-pybind11::dict PyDyssol::GetUnitStreamOverall(const std::string& unitName, const std::string& streamName) {
+pybind11::dict PyDyssol::GetUnitStreamOverall(const std::string& unitName, const std::string& streamName) const {
     pybind11::dict overall;
 
     const auto* unit = m_flowsheet.GetUnitByName(unitName);
@@ -151,7 +151,7 @@ pybind11::dict PyDyssol::GetUnitStreamOverall(const std::string& unitName, const
     return overall;
 }
 
-pybind11::dict PyDyssol::GetUnitStreamComposition(const std::string& unitName, const std::string& streamName) {
+pybind11::dict PyDyssol::GetUnitStreamComposition(const std::string& unitName, const std::string& streamName) const {
     pybind11::dict composition;
 
     const auto* unit = m_flowsheet.GetUnitByName(unitName);
@@ -197,7 +197,7 @@ pybind11::dict PyDyssol::GetUnitStreamComposition(const std::string& unitName, c
     return composition;
 }
 
-pybind11::dict PyDyssol::GetUnitStreamDistribution(const std::string& unitName, const std::string& streamName) {
+pybind11::dict PyDyssol::GetUnitStreamDistribution(const std::string& unitName, const std::string& streamName) const {
     pybind11::dict distributions;
 
     const auto* unit = m_flowsheet.GetUnitByName(unitName);
@@ -246,7 +246,7 @@ pybind11::dict PyDyssol::GetUnitStreamDistribution(const std::string& unitName, 
     return distributions;
 }
 
-pybind11::dict PyDyssol::GetUnitStream(const std::string& unitName, const std::string& streamName) {
+pybind11::dict PyDyssol::GetUnitStream(const std::string& unitName, const std::string& streamName) const {
     pybind11::dict result;
     result["overall"] = GetUnitStreamOverall(unitName, streamName);
     result["composition"] = GetUnitStreamComposition(unitName, streamName);
@@ -394,3 +394,35 @@ pybind11::dict PyDyssol::GetUnitStream(const std::string& unitName) {
     result["distributions"] = GetUnitStreamDistribution(unitName);
     return result;
 }
+
+pybind11::list PyDyssol::GetUnitStream() const
+{
+    namespace py = pybind11;
+    py::list out;
+    for (const auto* unit : m_flowsheet.GetAllUnits())
+    {
+        std::string unitName = unit->GetName();
+        const auto* model = unit->GetModel();
+        if (!model) continue;
+
+        for (const auto* stream : model->GetStreamsManager().GetStreams())
+        {
+            if (!stream) continue;
+
+            std::string streamName = stream->GetName();
+            py::dict d;
+            d["unit"] = unitName;
+            d["stream"] = streamName;
+            d["overall"] = GetUnitStreamOverall(unitName, streamName);
+            d["composition"] = GetUnitStreamComposition(unitName, streamName);
+
+            py::dict dist = GetUnitStreamDistribution(unitName, streamName);
+            dist.attr("pop")("Compounds", py::none());  // Clean-up
+            d["distributions"] = dist;
+
+            out.append(d);
+        }
+    }
+    return out;
+}
+

@@ -533,6 +533,8 @@ pybind11::list PyDyssol::GetUnitHoldup()
 //Sets
 static void SetHoldupValues(CHoldup* holdup, double time, const py::dict& data, const std::vector<const CGridDimension*>& gridDims, const CMaterialsDatabase& materialsDB)
 {
+    std::map<EPhase, double> phaseMassMap;
+
     // === Set composition ===
     if (data.contains("composition")) {
         const auto compDict = data["composition"].cast<py::dict>();
@@ -544,6 +546,7 @@ static void SetHoldupValues(CHoldup* holdup, double time, const py::dict& data, 
             if (split == std::string::npos || key.back() != ']') {
                 throw std::runtime_error("[PyDyssol] Invalid composition key format: '" + key + "'. Expected format: 'Compound [Phase]'");
             }
+
             std::string compoundName = key.substr(0, split);
             std::string phaseName = key.substr(split + 2, key.length() - split - 3);
 
@@ -560,6 +563,21 @@ static void SetHoldupValues(CHoldup* holdup, double time, const py::dict& data, 
             }
 
             holdup->SetCompoundMass(time, compound->GetKey(), phase, value);
+            phaseMassMap[phase] += value;
+        }
+
+        // Finalize phase masses
+        for (const auto& [phase, total] : phaseMassMap)
+            holdup->SetPhaseMass(time, phase, total);
+
+        // Override total mass ONLY if composition exists
+        if (!phaseMassMap.empty()) {
+            double totalCompositionMass = 0.0;
+            for (const auto& [_, mass] : phaseMassMap)
+                totalCompositionMass += mass;
+
+            if (totalCompositionMass > 0.0)
+                holdup->SetOverallProperty(time, StringToEOverall("mass"), totalCompositionMass);
         }
     }
 
@@ -568,6 +586,8 @@ static void SetHoldupValues(CHoldup* holdup, double time, const py::dict& data, 
         const auto overallDict = data["overall"].cast<py::dict>();
         for (const auto& item : overallDict) {
             std::string name = item.first.cast<std::string>();
+            if ((name == "mass" || name == "massflow") && !phaseMassMap.empty())
+                continue; // Skip only if composition present
             double value = item.second.cast<double>();
             holdup->SetOverallProperty(time, StringToEOverall(name), value);
         }
@@ -577,29 +597,27 @@ static void SetHoldupValues(CHoldup* holdup, double time, const py::dict& data, 
     std::map<std::string, EDistrTypes> nameToType;
     for (const CGridDimension* dim : gridDims) {
         int idx = GetDistributionTypeIndex(dim->DimensionType());
-        if (idx < 0) continue;
-        nameToType[DISTR_NAMES[idx]] = DISTR_TYPES[idx];
+        if (idx >= 0)
+            nameToType[DISTR_NAMES[idx]] = DISTR_TYPES[idx];
     }
 
     // === Set distributions ===
     if (data.contains("distributions")) {
         const auto distDict = data["distributions"].cast<py::dict>();
         for (const auto& item : distDict) {
-            std::string distrName = item.first.cast<std::string>();
+            std::string name = item.first.cast<std::string>();
             std::vector<double> values = item.second.cast<std::vector<double>>();
-            if (!nameToType.count(distrName))
-                throw std::runtime_error("Unknown or unsupported distribution: " + distrName);
-            EDistrTypes distrType = nameToType[distrName];
-
-            std::vector<double> normalized = Normalized(values);
+            if (!nameToType.count(name))
+                throw std::runtime_error("Unknown or unsupported distribution: " + name);
+            EDistrTypes distrType = nameToType[name];
+            std::vector<double> norm = Normalized(values);
             std::vector<double> current = holdup->GetDistribution(time, distrType);
-            if (current.size() != normalized.size())
-                throw std::runtime_error("Size mismatch in distribution '" + distrName + "'");
-            holdup->SetDistribution(time, distrType, normalized);
+            if (norm.size() != current.size())
+                throw std::runtime_error("Size mismatch in distribution '" + name + "'");
+            holdup->SetDistribution(time, distrType, norm);
         }
     }
 }
-
 
 void PyDyssol::SetUnitHoldup(const std::string& unitName, const pybind11::dict& data)
 {

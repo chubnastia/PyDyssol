@@ -29,6 +29,7 @@ private:
 	bool m_debug{ false };                  // Flag for debug mode
 	bool PyDyssol::ValidateFlowsheetState() const; // Validate the current state of the flowsheet
     bool PyDyssol::SetCompoundsFallback(const std::vector<std::string>& _compoundKeys);
+    
 
 public:
     PyDyssol(const std::string& materialsPath = "D:/Dyssol/Materials.dmdb",
@@ -145,6 +146,8 @@ public:
     pybind11::dict GetUnitFeedComposition(const std::string& unitName);
     pybind11::dict GetUnitFeedDistribution(const std::string& unitName);
     pybind11::list GetUnitFeed(const std::string& unitName);
+	//No arguments
+    pybind11::list GetUnitFeed();
     //Sets
     void SetUnitFeed(const std::string& unitName, const std::string& feedName, double time, const pybind11::dict& data);
     void SetUnitFeed(const std::string& unitName, const pybind11::dict& data);
@@ -164,27 +167,31 @@ public:
     pybind11::dict GetUnitStreamDistribution(const std::string& unitName, double time) const;
     pybind11::dict GetUnitStream(const std::string& unitName, double time) const;
 	// Unit streams with explicit stream name
-    pybind11::dict GetUnitStreamOverall(const std::string& unitName, const std::string& streamName);
-    pybind11::dict GetUnitStreamComposition(const std::string& unitName, const std::string& streamName);
-    pybind11::dict GetUnitStreamDistribution(const std::string& unitName, const std::string& streamName);
-    pybind11::dict GetUnitStream(const std::string& unitName, const std::string& streamName);
+    pybind11::dict GetUnitStreamOverall(const std::string& unitName, const std::string& streamName) const;
+    pybind11::dict GetUnitStreamComposition(const std::string& unitName, const std::string& streamName) const;
+    pybind11::dict GetUnitStreamDistribution(const std::string& unitName, const std::string& streamName) const;
+    pybind11::dict GetUnitStream(const std::string& unitName, const std::string& streamName) const;
     //Without timepoints, stream names
     pybind11::dict GetUnitStreamOverall(const std::string& unitName);
     pybind11::dict GetUnitStreamComposition(const std::string& unitName);
     pybind11::dict GetUnitStreamDistribution(const std::string& unitName);
     pybind11::dict GetUnitStream(const std::string& unitName);
+    //No arguments
+    pybind11::list GetUnitStream() const;
 
     //Streams
     pybind11::dict GetStream(const std::string& streamName, double time) const;
     std::map<std::string, double> GetStreamOverall(const std::string& streamName, double time) const;
     std::map<std::string, double> GetStreamComposition(const std::string& streamName, double time) const;
     pybind11::dict GetStreamDistribution(const std::string& streamName, double time) const;
-    std::vector<std::string> PyDyssol::GetStreams() const;
+    std::vector<std::string> GetStreams() const;
     //Without timepoints
-    pybind11::dict GetStreamOverall(const std::string& streamName);
-    pybind11::dict GetStreamComposition(const std::string& streamName);
-    pybind11::dict GetStreamDistribution(const std::string& streamName);
-    pybind11::dict GetStream(const std::string& streamName);
+    pybind11::dict GetStreamOverall(const std::string& streamName) const;
+    pybind11::dict GetStreamComposition(const std::string & streamName) const;
+    pybind11::dict GetStreamDistribution(const std::string & streamName) const;
+    pybind11::dict GetStream(const std::string & streamName) const;
+    //No arguments
+    pybind11::list GetStream() const;
 
     //Options
     pybind11::dict GetOptions() const;

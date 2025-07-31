@@ -105,8 +105,7 @@ PYBIND11_MODULE(PyDyssol, m) {
         .def("set_compounds", &PyDyssol::SetCompounds, "Set compounds using compound names from the materials database")
 
         //Phases
-        .def("get_phases", &PyDyssol::GetPhases,
-            "Return current list of phases.")
+        .def("get_phases", &PyDyssol::GetPhases, "Return current list of phases.")
         .def("set_phases", &PyDyssol::SetPhases,
             py::arg("phases"),
             "Replace current phase list. Each item must be (state).")
@@ -394,6 +393,9 @@ PYBIND11_MODULE(PyDyssol, m) {
             py::overload_cast<const std::string&>(&PyDyssol::GetUnitFeed),
             py::arg("unit_name"),
             "Get full time-series feed data (overall, composition, distributions) for the first feed in a unit.")
+        //No arguments
+        .def("get_unit_feed", py::overload_cast<>(&PyDyssol::GetUnitFeed),
+            "Get all feeds of all units, in the same structure as config['feeds']")
 
 
         // Unit Streams
@@ -417,8 +419,12 @@ PYBIND11_MODULE(PyDyssol, m) {
             py::arg("unit_name"), py::arg("stream_name"), py::arg("time"),
             "Get all data (overall, composition, distributions) of a stream inside a unit at a specific time.")
 
-        // Unit Streams without Stream Name
+        //no arguments
+       .def("get_unit_stream",
+            py::overload_cast<>(&PyDyssol::GetUnitStream, py::const_),
+            "Get data (overall, composition, distributions) for every unit stream in every unit of the flowsheet.")
 
+        // Unit Streams without Stream Name
         .def("get_unit_stream_overall",
             py::overload_cast<const std::string&, double>(&PyDyssol::GetUnitStreamOverall, py::const_),
             py::arg("unit_name"), py::arg("time"),
@@ -437,22 +443,25 @@ PYBIND11_MODULE(PyDyssol, m) {
             "Get all data of the first stream inside a unit at a specific time.")
 
             //Unit Streams with explicit stream name and no timepoints
-            .def("get_unit_stream_overall",
-                py::overload_cast<const std::string&, const std::string&>(&PyDyssol::GetUnitStreamOverall),
-                py::arg("unit_name"), py::arg("stream_name"),
-                "Get time-series overall properties (massflow, temperature, pressure) for a named stream inside a unit.")
-            .def("get_unit_stream_composition",
-                py::overload_cast<const std::string&, const std::string&>(&PyDyssol::GetUnitStreamComposition),
-                py::arg("unit_name"), py::arg("stream_name"),
-                "Get time-series compound-phase composition for a named internal stream.")
-            .def("get_unit_stream_distribution",
-                py::overload_cast<const std::string&, const std::string&>(&PyDyssol::GetUnitStreamDistribution),
-                py::arg("unit_name"), py::arg("stream_name"),
-                "Get time-series distributions for a named stream inside a unit.")
-            .def("get_unit_stream",
-                py::overload_cast<const std::string&, const std::string&>(&PyDyssol::GetUnitStream),
-                py::arg("unit_name"), py::arg("stream_name"),
-                "Get full time-series data (overall, composition, distributions) for a named stream inside a unit.")
+       .def("get_unit_stream_overall",
+            py::overload_cast<const std::string&, const std::string&>(
+            &PyDyssol::GetUnitStreamOverall, py::const_),
+            py::arg("unit_name"), py::arg("stream_name"),
+            "Get time-series overall properties (massflow, temperature, pressure) for a named stream inside a unit.")
+       .def("get_unit_stream_composition",
+            py::overload_cast<const std::string&, const std::string&>(
+            &PyDyssol::GetUnitStreamComposition, py::const_),
+            py::arg("unit_name"), py::arg("stream_name"),
+            "Get time-series compound-phase composition for a named internal stream.")
+       .def("get_unit_stream_distribution",
+            py::overload_cast<const std::string&, const std::string&>(
+            &PyDyssol::GetUnitStreamDistribution, py::const_),
+            py::arg("unit_name"), py::arg("stream_name"),
+            "Get time-series distributions for a named stream inside a unit.")
+       .def("get_unit_stream",
+            py::overload_cast<const std::string&, const std::string&>(&PyDyssol::GetUnitStream, py::const_),
+            py::arg("unit_name"), py::arg("stream_name"),
+            "Get data for a single unit stream.")
 
             //Unit Streams without timepoints
             .def("get_unit_stream_overall",
@@ -495,22 +504,27 @@ PYBIND11_MODULE(PyDyssol, m) {
 
             //Streams without timepoints
             .def("get_stream_overall",
-                py::overload_cast<const std::string&>(&PyDyssol::GetStreamOverall),
+                static_cast<pybind11::dict(PyDyssol::*)(const std::string&) const>(&PyDyssol::GetStreamOverall),
                 py::arg("stream_name"),
                 "Get overall stream data for all timepoints.")
-            .def("get_stream_composition",
-                py::overload_cast<const std::string&>(&PyDyssol::GetStreamComposition),
+           .def("get_stream_composition",
+                static_cast<pybind11::dict(PyDyssol::*)(const std::string&) const>(&PyDyssol::GetStreamComposition),
                 py::arg("stream_name"),
                 "Get stream composition for all timepoints.")
-            .def("get_stream_distribution",
-                py::overload_cast<const std::string&>(&PyDyssol::GetStreamDistribution),
+           .def("get_stream_distribution",
+                static_cast<pybind11::dict(PyDyssol::*)(const std::string&) const>(&PyDyssol::GetStreamDistribution),
                 py::arg("stream_name"),
                 "Get stream distribution for all timepoints.")
 
-            .def("get_stream",
-                py::overload_cast<const std::string&>(&PyDyssol::GetStream),
+           .def("get_stream",
+                static_cast<pybind11::dict(PyDyssol::*)(const std::string&) const>(
+                &PyDyssol::GetStream),
                 py::arg("stream_name"),
                 "Get all stream data (overall, composition, distributions) for all timepoints.")
+            .def("get_stream",
+                static_cast<pybind11::list(PyDyssol::*)() const>(
+                    &PyDyssol::GetStream),
+                "Get data for every flowsheet-level stream: returns a list of {overall, composition, distributions} dicts.")
 
             //Options
             .def("get_options", &PyDyssol::GetOptions, "Get flowsheet simulation options.")
@@ -531,7 +545,6 @@ PYBIND11_MODULE(PyDyssol, m) {
             //Debugging
             .def("debug_unit_ports", &PyDyssol::DebugUnitPorts, py::arg("unit_name"))
             .def("debug_stream_data", &PyDyssol::DebugStreamData, py::arg("stream_name"), py::arg("time"));
-            //.def("commit_compounds", &PyDyssol::CommitCompounds, "Commits compounds to the flowsheet");
 
 
     // Register exceptions
