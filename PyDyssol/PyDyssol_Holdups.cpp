@@ -33,8 +33,8 @@ pybind11::dict PyDyssol::GetUnitHoldupOverall(const std::string& unitName) {
 
     std::vector<double> timepoints = holdup->GetAllTimePoints();
     double t_end = m_flowsheet.GetParameters()->endSimulationTime;
-    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
-        timepoints.push_back(t_end);
+    //if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+    //    timepoints.push_back(t_end);
 
     std::vector<double> timeList;
     std::map<std::string, std::vector<double>> overallData;
@@ -63,8 +63,8 @@ pybind11::dict PyDyssol::GetUnitHoldupOverall(const std::string& unitName, const
 
     std::vector<double> timepoints = holdup->GetAllTimePoints();
     double t_end = m_flowsheet.GetParameters()->endSimulationTime;
-    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
-        timepoints.push_back(t_end);
+    //if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+    //    timepoints.push_back(t_end);
 
     std::vector<double> timeList;
     std::map<std::string, std::vector<double>> data;
@@ -127,8 +127,8 @@ pybind11::dict PyDyssol::GetUnitHoldupComposition(const std::string& unitName) {
 
     std::vector<double> timepoints = holdup->GetAllTimePoints();
     double t_end = m_flowsheet.GetParameters()->endSimulationTime;
-    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
-        timepoints.push_back(t_end);
+    //if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+    //    timepoints.push_back(t_end);
 
     std::vector<double> timeList;
     std::map<std::string, std::vector<double>> compositionData;
@@ -171,8 +171,8 @@ pybind11::dict PyDyssol::GetUnitHoldupComposition(const std::string& unitName, c
 
     std::vector<double> timepoints = holdup->GetAllTimePoints();
     double t_end = m_flowsheet.GetParameters()->endSimulationTime;
-    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
-        timepoints.push_back(t_end);
+   // if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+    //    timepoints.push_back(t_end);
 
     std::vector<double> timeList;
     std::map<std::string, std::vector<double>> compositionData;
@@ -268,8 +268,8 @@ pybind11::dict PyDyssol::GetUnitHoldupDistribution(const std::string& unitName) 
 
     std::vector<double> timepoints = holdup->GetAllTimePoints();
     double t_end = m_flowsheet.GetParameters()->endSimulationTime;
-    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
-        timepoints.push_back(t_end);
+    //if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+    //    timepoints.push_back(t_end);
 
     std::vector<double> timeList;
     std::set<std::string> allDistributions;
@@ -315,8 +315,8 @@ pybind11::dict PyDyssol::GetUnitHoldupDistribution(const std::string& unitName, 
 
     std::vector<double> timepoints = holdup->GetAllTimePoints();
     double t_end = m_flowsheet.GetParameters()->endSimulationTime;
-    if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
-        timepoints.push_back(t_end);
+    //if (timepoints.empty() || std::abs(timepoints.back() - t_end) > 1e-6)
+    //    timepoints.push_back(t_end);
 
     std::vector<double> timeList;
     std::map<std::string, std::vector<std::vector<double>>> data;
@@ -619,6 +619,17 @@ static void SetHoldupValues(CHoldup* holdup, double time, const py::dict& data, 
     }
 }
 
+static void ClearAllHoldupTimePointsExcept(CHoldup* holdup, const std::vector<double>& keepTimes)
+{
+    if (!holdup) return;
+
+    for (double t : holdup->GetAllTimePoints()) {
+        if (std::find(keepTimes.begin(), keepTimes.end(), t) == keepTimes.end()) {
+            holdup->RemoveTimePoint(t);
+        }
+    }
+}
+
 void PyDyssol::SetUnitHoldup(const std::string& unitName, const pybind11::dict& data)
 {
     const double time = 0.0;
@@ -638,6 +649,7 @@ void PyDyssol::SetUnitHoldup(const std::string& unitName, const pybind11::dict& 
 
     SetHoldupValues(holdupsWork.front(), time, data, gridDims, m_materialsDatabase);
     SetHoldupValues(holdupsInit.front(), time, data, gridDims, m_materialsDatabase);
+    ClearAllHoldupTimePointsExcept(holdupsWork.front(), { 0.0 });
 }
 
 void PyDyssol::SetUnitHoldup(const std::string& unitName, const std::string& holdupName, const pybind11::dict& data)
@@ -658,6 +670,8 @@ void PyDyssol::SetUnitHoldup(const std::string& unitName, const std::string& hol
     const auto& gridDims = m_flowsheet.GetGrid().GetGridDimensions();
     SetHoldupValues(holdupWork, time, data, gridDims, m_materialsDatabase);
     SetHoldupValues(holdupInit, time, data, gridDims, m_materialsDatabase);
+    const std::vector<double> keep = { 0.0 };
+    ClearAllHoldupTimePointsExcept(holdupWork, keep);
 }
 
 void PyDyssol::SetUnitHoldup(const py::dict& d)

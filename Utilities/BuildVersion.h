@@ -1,2 +1,2 @@
 #pragma once 
-const char CURRENT_BUILD_VERSION[] = "~2,2~4,2~6,2.~8,2~10,2~12,2.8a05700";
+const char CURRENT_BUILD_VERSION[] = "~2,2~4,2~6,2.~8,2~10,2~12,2.f60be00";

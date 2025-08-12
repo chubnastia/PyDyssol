@@ -452,8 +452,6 @@ static void ClearAllStreamTimePointsExcept(CStream* stream, const std::vector<do
     }
 }
 
-
-
 void PyDyssol::SetUnitFeed(const std::string& unitName, const std::string& feedName, double time, const pybind11::dict& data)
 {
     CUnitContainer* unit = m_flowsheet.GetUnitByName(unitName);
@@ -542,8 +540,6 @@ void PyDyssol::SetUnitFeed(const std::string& unitName, const std::string& feedN
             feedInit->SetDistribution(time, distrType, norm);
         }
     }
-    //ClearAllStreamTimePointsExcept(feed, { time });
-    //ClearAllStreamTimePointsExcept(feedInit, { time });
 }
 
 void PyDyssol::SetUnitFeed(const std::string& unitName, const std::string& feedName, const py::dict& data)
