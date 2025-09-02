@@ -68,7 +68,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Libraries\robin-map\include;C:\Libraries\nanobind\include;C:\Users\cac4644\.pyenv\pyenv-win\versions\3.13.3\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\cac4644\AppData\Local\Programs\Python\Python313\Lib\site-packages\nanobind\include;C:\Users\cac4644\.pyenv\pyenv-win\versions\3.13.3\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link />
     <Link>

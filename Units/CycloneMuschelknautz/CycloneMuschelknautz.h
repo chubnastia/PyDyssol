@@ -42,6 +42,8 @@ class CCycloneMuschelknautz : public CSteadyStateUnit
     CMaterialStream* outlet_s{ nullptr };
     CMaterialStream* outlet_g{ nullptr };
 
+    CHoldup* m_holdup{};
+
     // Transform matrices
     CTransformMatrix tm_i2s;
     CTransformMatrix tm_i2g;

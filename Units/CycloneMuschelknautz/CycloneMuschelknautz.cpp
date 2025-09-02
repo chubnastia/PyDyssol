@@ -100,6 +100,10 @@ void CCycloneMuschelknautz::CreateStructure()
 
     if (up_reaction->GetReactions().empty())
         up_reaction->SetReactions({});
+
+    m_holdup = AddHoldup("Holdup1");
+    m_holdup = AddHoldup("Holdup2");
+
 }
 
 void CCycloneMuschelknautz::Initialize(double _time)
